@@ -139,6 +139,14 @@ option(DISCORD      "Discord Rich Presence support"                             
 option(DEBUGREGS486 "Enable debug register opeartion on 486+ CPUs"               OFF)
 option(LIBASAN      "Enable compilation with the addresss sanitizer"             OFF)
 
+if (NV_LOG)
+    add_compile_definitions(ENABLE_NV_LOG)
+endif()
+
+if (NV_LOG_ULTRA)
+    add_compile_definitions(ENABLE_NV_LOG_ULTRA)
+endif()
+
 if((ARCH STREQUAL "arm64"))
     set(NEW_DYNAREC ON)
 else()
