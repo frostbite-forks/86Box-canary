@@ -189,7 +189,7 @@ void nv4_update_mappings(void)
 }
 
 
-bool nv4_init()
+bool nv4_init(void)
 {
     nv4 = calloc(1, sizeof(nv4_t));
  
@@ -258,17 +258,17 @@ void* nv4_init_stb4400(const device_t *info)
         return NULL;
 }
 
-void nv4_nvclk_tick(void)
+void nv4_nvclk_tick(void *priv)
 {
 
 }
 
-void nv4_mclk_tick(void)
+void nv4_mclk_tick(void *priv)
 {
 
 }
 
-void nv4_vclk_tick(void)
+void nv4_vclk_tick(void *priv)
 {
 
 }

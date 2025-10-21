@@ -191,7 +191,7 @@ void        nv4_pramdac_write(uint32_t address, uint32_t data);
 // We don't implement NVCLK/VCLK because they are too fast
 void        nv4_pramdac_set_vclk(void);
 
-void        nv4_vclk_tick(void);
+void        nv4_vclk_tick(void *priv);
 
 // PTIMER
 uint32_t    nv4_ptimer_read(uint32_t address);
