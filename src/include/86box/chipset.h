@@ -35,6 +35,7 @@ extern const device_t ali6117d_device;
 
 /* AMD */
 extern const device_t amd640_device;
+extern const device_t amd751_device;
 
 /* ASUS */
 extern const device_t isa486c_device;
@@ -123,6 +124,11 @@ extern const device_t lxt3_device;
 
 /* Olivetti */
 extern const device_t olivetti_eva_device;
+
+/* Intel ICH2 */
+extern const device_t intel_815ep_device;
+extern const device_t intel_ich2_device;
+
 
 /* OPTi */
 extern const device_t opti283_device;

@@ -39,6 +39,8 @@ add_library(chipset OBJECT
     headland.c
     ims8848.c
     intel_82335.c
+    intel_815ep.c
+    intel_ich2.c
     intel_420ex.c
     intel_4x0.c
     intel_i450kx.c
