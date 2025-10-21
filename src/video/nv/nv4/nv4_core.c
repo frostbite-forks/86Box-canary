@@ -278,17 +278,6 @@ void nv4_close(void* priv)
     free(nv4);
 }
 
-void nv4_speed_changed(void *priv)
-{
-
-}
-
-void nv4_draw_cursor(svga_t* svga, int32_t drawline)
-{
-
-}
-
-
 //
 // SVGA functions
 //
