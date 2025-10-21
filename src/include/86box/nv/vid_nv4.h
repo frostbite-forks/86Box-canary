@@ -18,7 +18,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
-#include <86Box/nv/vid_nv4_defines.h>
+#include <86box/nv/vid_nv4_defines.h>
 
 //
 // Structures
