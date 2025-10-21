@@ -1,4 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
+
+#include "x87_ops.h"
+
 static int
 opCVTPI2PS_xmm_mm_a16(uint32_t fetchdat)
 {
