@@ -190,6 +190,7 @@ video_cards[] = {
     { .device = &mach64vt2_device,                              .flags = VIDEO_FLAG_TYPE_NONE },
     { .device = &bochs_svga_device,                             .flags = VIDEO_FLAG_TYPE_NONE },
     { .device = &chips_69000_device,                            .flags = VIDEO_FLAG_TYPE_NONE },
+    { .device = &at3d_device,                                   .flags = VIDEO_FLAG_TYPE_NONE },
     { .device = &gd5430_pci_device,                             .flags = VIDEO_FLAG_TYPE_NONE },
     { .device = &gd5434_pci_device,                             .flags = VIDEO_FLAG_TYPE_NONE },
     { .device = &gd5436_pci_device,                             .flags = VIDEO_FLAG_TYPE_SECONDARY },

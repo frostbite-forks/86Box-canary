@@ -631,6 +631,7 @@ extern const device_t voodoo_3_3500_se_agp_device;
 extern const device_t voodoo_3_3500_si_agp_device;
 extern const device_t velocity_100_agp_device;
 extern const device_t velocity_200_agp_device;
+extern const device_t at3d_device;
 extern const device_t nv1_device_edge2k;
 extern const device_t nv1_device_edge3k;
 extern const device_t nv3_device_pci;

@@ -110,6 +110,9 @@ add_library(vid OBJECT
     # Chips & Technologies
     vid_chips_69000.c
 
+    # Alliance Semiconductor
+    vid_at3d.c
+
     # Cirrus Logic
     vid_cl54xx.c
 
@@ -237,6 +240,7 @@ add_library(voodoo OBJECT
     vid_voodoo_fifo.c
     vid_voodoo_reg.c
     vid_voodoo_render.c
+    vid_voodoo_rush.c
     vid_voodoo_setup.c
     vid_voodoo_texture.c
 )
