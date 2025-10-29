@@ -603,9 +603,6 @@ msgstr "Канал:"
 msgid "ID:"
 msgstr "ID:"
 
-msgid "&Specify..."
-msgstr "&Вказати..."
-
 msgid "Sectors:"
 msgstr "Сектора:"
 
@@ -852,8 +849,8 @@ msgstr "Пристрої PCap не знайдені"
 msgid "Invalid PCap device"
 msgstr "Невірний пристрій PCap"
 
-msgid "Generic Paddle Controller(s)"
-msgstr ""
+msgid "Generic paddle controller(s)"
+msgstr "Загальний контролер(и) весла"
 
 msgid "2-axis, 1-button joystick(s)"
 msgstr "2-осьовий, 1-кнопковий джойстик"
@@ -924,13 +921,13 @@ msgstr "3-кнопковий flight yoke з дроселем"
 msgid "4-button flight yoke with throttle"
 msgstr "4-кнопковий flight yoke з дроселем"
 
-msgid "Steering Wheel (3-axis, 2-button)"
+msgid "Steering wheel (3-axis, 2-button)"
 msgstr "Кермо (3-осьове, 2-кнопкове)"
 
-msgid "Steering Wheel (3-axis, 3-button)"
+msgid "Steering wheel (3-axis, 3-button)"
 msgstr "Кермо (3-осьове, 3-кнопкове)"
 
-msgid "Steering Wheel (3-axis, 4-button)"
+msgid "Steering wheel (3-axis, 4-button)"
 msgstr "Кермо (3-осьове, 4-кнопкове)"
 
 msgid "CH Flightstick"
@@ -978,11 +975,11 @@ msgstr "Система управління польотом Thrustmaster"
 msgid "Thrustmaster FCS + Rudder Control System"
 msgstr "Thrustmaster FCS + Система управління кермом"
 
-msgid "Thrustmaster Formula T1/T2 with Adaptor"
-msgstr "Thrustmaster Formula T1/T2 with Adaptor"
+msgid "Thrustmaster Formula T1/T2 with adapter"
+msgstr "Thrustmaster Formula T1/T2 з адаптером"
 
-msgid "Thrustmaster Formula T1/T2 without Adaptor"
-msgstr "Thrustmaster Formula T1/T2 without Adaptor"
+msgid "Thrustmaster Formula T1/T2 without adapter"
+msgstr "Thrustmaster Formula T1/T2 без адаптера"
 
 msgid "None"
 msgstr "Ні"
@@ -1789,7 +1786,7 @@ msgid "Remove"
 msgstr "Видалити"
 
 msgid "Browse..."
-msgstr "Переглянути..."
+msgstr "Огляд..."
 
 msgid "Couldn't create OpenGL context."
 msgstr "Не вдалося створити контекст OpenGL."
@@ -1856,6 +1853,9 @@ msgstr "Адаптер:"
 
 msgid "VDE Socket:"
 msgstr "VDE сокет:"
+
+msgid "TAP Bridge Device:"
+msgstr ""
 
 msgid "86Box Unit Tester"
 msgstr "Тестер блоків 86Box"
@@ -3062,9 +3062,6 @@ msgstr "Режим розтягування вхідних даних OpenGL"
 
 msgid "Color scheme"
 msgstr "Колірна гамма"
-
-msgid "System"
-msgstr ""
 
 msgid "Light"
 msgstr "Світло"

@@ -603,9 +603,6 @@ msgstr "チャンネル:"
 msgid "ID:"
 msgstr "ID:"
 
-msgid "&Specify..."
-msgstr "参照(&S)..."
-
 msgid "Sectors:"
 msgstr "セクター:"
 
@@ -852,8 +849,8 @@ msgstr "PCapデバイスがありません"
 msgid "Invalid PCap device"
 msgstr "不正なPCapデバイス"
 
-msgid "Generic Paddle Controller(s)"
-msgstr ""
+msgid "Generic paddle controller(s)"
+msgstr "汎用パドルコントローラー"
 
 msgid "2-axis, 1-button joystick(s)"
 msgstr "ジョイスティック(2軸、1ボタン)"
@@ -924,13 +921,13 @@ msgstr "3ボタン式フライトヨーク(スロットル付き)"
 msgid "4-button flight yoke with throttle"
 msgstr "4ボタン式フライトヨーク(スロットル付き)"
 
-msgid "Steering Wheel (3-axis, 2-button)"
+msgid "Steering wheel (3-axis, 2-button)"
 msgstr "ステアリングホイール(3軸、2ボタン)"
 
-msgid "Steering Wheel (3-axis, 3-button)"
+msgid "Steering wheel (3-axis, 3-button)"
 msgstr "ステアリングホイール(3軸、3ボタン)"
 
-msgid "Steering Wheel (3-axis, 4-button)"
+msgid "Steering wheel (3-axis, 4-button)"
 msgstr "ステアリングホイール(3軸、4ボタン)"
 
 msgid "CH Flightstick"
@@ -978,11 +975,11 @@ msgstr "Thrustmaster Flight Control System"
 msgid "Thrustmaster FCS + Rudder Control System"
 msgstr "Thrustmaster FCS + Rudder Control System"
 
-msgid "Thrustmaster Formula T1/T2 with Adaptor"
-msgstr "Thrustmaster Formula T1/T2 with Adaptor"
+msgid "Thrustmaster Formula T1/T2 with adapter"
+msgstr "アダプター付き Thrustmaster Formula T1/T2"
 
-msgid "Thrustmaster Formula T1/T2 without Adaptor"
-msgstr "Thrustmaster Formula T1/T2 without Adaptor"
+msgid "Thrustmaster Formula T1/T2 without adapter"
+msgstr "アダプターなし Thrustmaster Formula T1/T2"
 
 msgid "None"
 msgstr "なし"
@@ -1789,7 +1786,7 @@ msgid "Remove"
 msgstr "削除"
 
 msgid "Browse..."
-msgstr "ブラウズ..."
+msgstr "参照..."
 
 msgid "Couldn't create OpenGL context."
 msgstr "OpenGLコンテキストを作成できませんでした。"
@@ -1856,6 +1853,9 @@ msgstr "アダプター:"
 
 msgid "VDE Socket:"
 msgstr "VDEソケット:"
+
+msgid "TAP Bridge Device:"
+msgstr ""
 
 msgid "86Box Unit Tester"
 msgstr "86Boxユニットテスター"
@@ -3062,9 +3062,6 @@ msgstr "OpenGLの入力ストレッチモード"
 
 msgid "Color scheme"
 msgstr "配色"
-
-msgid "System"
-msgstr ""
 
 msgid "Light"
 msgstr "光"
