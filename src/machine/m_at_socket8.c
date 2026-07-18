@@ -37,6 +37,7 @@
 #include <86box/video.h>
 #include "cpu.h"
 #include <86box/machine.h>
+#include <86box/apic.h>
 
 /* i450KX */
 int

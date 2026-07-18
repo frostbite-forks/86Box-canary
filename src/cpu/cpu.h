@@ -79,9 +79,14 @@ enum {
     CPU_K6_2P,
     CPU_K6_3P,
     CPU_CYRIX3S,
+    CPU_CYRIX3N,
     CPU_PENTIUMPRO, /* 686 class CPUs */
     CPU_PENTIUM2,
-    CPU_PENTIUM2D
+    CPU_PENTIUM2D,
+    CPU_ATHLON,
+    CPU_PENTIUM3,
+    CPU_PENTIUM4W,
+    CPU_GENERICINTEL,
 };
 
 enum {
@@ -112,13 +117,18 @@ enum {
     CPU_PKG_SOCKET8          = (1 << 24),
     CPU_PKG_SLOT1            = (1 << 25),
     CPU_PKG_SLOT2            = (1 << 26),
-    CPU_PKG_SOCKET370        = (1 << 27)
+    CPU_PKG_SOCKET370        = (1 << 27),
+    CPU_PKG_SLOTA            = (1 << 28),
+    CPU_PKG_SOCKET423        = (1 << 29),
+    CPU_PKG_SOCKET478        = (1 << 30),
 };
 
 #define CPU_SUPPORTS_DYNAREC 1
 #define CPU_REQUIRES_DYNAREC 2
 #define CPU_ALTERNATE_XTAL   4
 #define CPU_FIXED_MULTIPLIER 8
+
+#define EFER_NXE (1 << 11)
 
 #define CCR1_USE_SMI  (1 << 1)
 #define CCR1_SMAC     (1 << 2)
@@ -143,22 +153,22 @@ typedef struct cpu_t {
     const char *name;
     uint64_t    cpu_type;
     const FPU  *fpus;
-    uint32_t    rspeed;
+    uint64_t    rspeed;
     double      multi;
     uint16_t    voltage;
     uint32_t    edx_reset;
     uint32_t    cpuid_model;
     uint16_t    cyrix_id;
     uint8_t     cpu_flags;
-    int8_t      mem_read_cycles;
-    int8_t      mem_write_cycles;
-    int8_t      cache_read_cycles;
-    int8_t      cache_write_cycles;
-    int8_t      atclk_div;
+    uint16_t    mem_read_cycles;
+    uint16_t    mem_write_cycles;
+    uint16_t    cache_read_cycles;
+    uint16_t    cache_write_cycles;
+    uint16_t    atclk_div;
 } CPU;
 
 typedef struct {
-    const uint32_t package;
+    const uint64_t package;
     const char    *manufacturer;
     const char    *name;
     const char    *internal_name;
@@ -186,16 +196,17 @@ typedef struct {
 #define EM_FLAG    0x00004 /* in CR0 */
 #define WP_FLAG    0x10000 /* in CR0 */
 
-#define CR4_VME    (1 << 0) /* Virtual 8086 Mode Extensions */
-#define CR4_PVI    (1 << 1) /* Protected-mode Virtual Interrupts */
-#define CR4_TSD    (1 << 2) /* Time Stamp Disable */
-#define CR4_DE     (1 << 3) /* Debugging Extensions */
-#define CR4_PSE    (1 << 4) /* Page Size Extension */
-#define CR4_PAE    (1 << 5) /* Physical Address Extension */
-#define CR4_MCE    (1 << 6) /* Machine Check Exception */
-#define CR4_PGE    (1 << 7) /* Page Global Enabled */
-#define CR4_PCE    (1 << 8) /* Performance-Monitoring Counter enable */
-#define CR4_OSFXSR (1 << 9) /* Operating system support for FXSAVE and FXRSTOR instructions */
+#define CR4_VME        (1 << 0)  /* Virtual 8086 Mode Extensions */
+#define CR4_PVI        (1 << 1)  /* Protected-mode Virtual Interrupts */
+#define CR4_TSD        (1 << 2)  /* Time Stamp Disable */
+#define CR4_DE         (1 << 3)  /* Debugging Extensions */
+#define CR4_PSE        (1 << 4)  /* Page Size Extension */
+#define CR4_PAE        (1 << 5)  /* Physical Address Extension */
+#define CR4_MCE        (1 << 6)  /* Machine Check Exception */
+#define CR4_PGE        (1 << 7)  /* Page Global Enabled */
+#define CR4_PCE        (1 << 8)  /* Performance-Monitoring Counter enable */
+#define CR4_OSFXSR     (1 << 9)  /* Operating system support for FXSAVE and FXRSTOR instructions */
+#define CR4_OSXMMEXCPT (1 << 10) /* Operating system support for unmasked SIMD floating-point exceptions */
 
 #define CPL        ((cpu_state.seg_cs.access >> 5) & 3)
 
@@ -235,6 +246,21 @@ typedef union {
     float    f[2];
 } MMX_REG;
 
+typedef union {
+    uint64_t q[2];
+    int64_t  sq[2];
+    uint32_t l[4];
+    int32_t  sl[4];
+    uint16_t w[8];
+    int16_t  sw[8];
+    uint8_t  b[16];
+    int8_t   sb[16];
+    uint32_t   f[4]; //float32
+    uint64_t   d[2]; //float64
+    float f2[4];
+    double d2[2];
+} SSE_REG;
+
 typedef struct {
     /* IBM 386SLC/486SLC/486BL MSRs */
     uint64_t ibm_por;  /* 0x00001000 - 386SLC and later */
@@ -248,6 +274,11 @@ typedef struct {
     uint64_t fcr3;     /* 0x00000108 (IDT), 0x00001108 (VIA) */
     uint64_t mcr[8];   /* 0x00000110 - 0x00000117 (IDT) */
     uint32_t mcr_ctrl; /* 0x00000120 (IDT) */
+    uint32_t bcr2;     /* 0x00001147 - also on C3 Samuel 2 and Ezra */
+
+    /* VIA C3 MSRs */
+    uint64_t longhaul;    /* 0x0000110a - Samuel 2 and later */
+    uint32_t padlock_rng; /* 0x0000110b - Nehemiah and later */
 
     /* AMD K5/K6 MSRs */
     uint64_t amd_aar;    /* 0x00000082 - all K5 */
@@ -321,8 +352,31 @@ typedef struct {
     uint64_t mtrr_deftype;     /* 0x000002ff */
 
     uint64_t pat;        /* 0x00000277 - Pentium II Deschutes and later */
-    uint64_t mca_ctl[5]; /* 0x00000400, 0x00000404, 0x00000408, 0x0000040c, 0x00000410 */
+    uint64_t mca_ctl[5]; /* 0x00000400, 0x00000404, 0x00000408, 0x0000040c, 0x00000410 - Machine Check Architecture */
     uint64_t ecx570;     /* 0x00000570 */
+
+    /* Pentium II/III/IV MSR's needed for late BIOS */
+    uint64_t ecx1a0; /* 0x000001a0 */
+    uint64_t ecx198; /* 0x00000198 */
+    uint64_t ecx19a; /* 0x0000019a */
+    uint64_t ecx19d; /* 0x0000019d */
+
+    /* K7 MSRs */
+    uint64_t amd_syscfg; /* 0xc0010010 */
+
+    uint64_t amd_hwcr_athlon; /* 0xc0010015 */
+    uint64_t amd_iorrbase1;   /* 0xc0010016 */
+    uint64_t amd_iorrmask1;   /* 0xc0010017 */
+    uint64_t amd_iorrbase2;   /* 0xc0010018 */
+    uint64_t amd_iorrmask2;   /* 0xc0010019 */
+    uint64_t amd_topmem;      /* 0xc001001a */
+    uint64_t amd_clkctl;      /* 0xc001001b */
+
+    uint64_t ecxc001001c; /* 0xc001001c */
+
+    uint64_t amd_smbase;  /* 0xc0010111 */
+    uint64_t amd_smmaddr; /* 0xc0010112 */
+    uint64_t amd_smmmask; /* 0xc0010113 */
 
     /* Other/Unclassified MSRs */
     uint64_t ecx20; /* 0x00000020, really 0x40000020, but we filter out the top 18 bits
@@ -414,12 +468,26 @@ typedef struct {
     uint32_t _smbase;
 
     uint32_t x87_op;
+
+    x86reg regs64[8];
+    uint32_t regs_high[16];
+    uint32_t pc_high;
+    uint32_t oldpc_high;
+    uint32_t mxcsr;
+    SSE_REG XMM[16];
+    uint64_t cr8;
+    uint32_t cr2_high;
+    uint32_t cr3_high;
+    uint8_t rex_byte;
+    int rex_present;
+    int sse_xmm;
 } cpu_state_t;
+
 
 #define in_smm   cpu_state._in_smm
 #define smi_line cpu_state._smi_line
 
-#define smbase   cpu_state._smbase
+#define smbase cpu_state._smbase
 
 /*The cpu_state.flags below must match in both cpu_cur_status and block->status for a block
   to be valid*/
@@ -526,6 +594,8 @@ extern int is_pentium;
 extern int is_k5;
 extern int is_k6;
 extern int is_p6;
+extern int is_athlon;
+extern int is_pentium3;
 extern int is_cxsmm;
 extern int is_cx6x86;
 extern int hascache;
@@ -544,8 +614,15 @@ extern int hasfpu;
 #define CPU_FEATURE_SYSCALL (1 << 7)
 #define CPU_FEATURE_3DNOWE  (1 << 8)
 #define CPU_FEATURE_PSE36   (1 << 9)
+#define CPU_FEATURE_LAPIC   (1 << 10)
+#define CPU_FEATURE_SSE     (1 << 11)
+#define CPU_FEATURE_PGE     (1 << 12)
+#define CPU_FEATURE_SSE2    (1 << 13)
+#define CPU_FEATURE_CLFLUSH (1 << 14)
+#define CPU_FEATURE_NX      (1 << 15)
+#define CPU_FEATURE_MONITOR_MWAIT (1 << 16)
 
-extern uint32_t cpu_features;
+extern uint64_t cpu_features;
 
 extern int smi_latched;
 extern int smm_in_hlt;
@@ -582,6 +659,9 @@ extern uint16_t temp_seg_data[4];
 extern uint16_t cs_msr;
 extern uint32_t esp_msr;
 extern uint32_t eip_msr;
+
+#define MXCSR_DAZ 0x0040
+#define MXCSR_FTZ 0x8000
 
 /* For the AMD K6. */
 extern uint64_t amd_efer;
@@ -849,6 +929,9 @@ extern int in_lock;
 extern int cpu_override_interpreter;
 
 extern int is_lock_legal(uint32_t fetchdat);
+
+extern void cpu_INVD(uint8_t wb);
+
 
 extern void     prefetch_queue_set_pos(int pos);
 extern void     prefetch_queue_set_ip(uint16_t ip);

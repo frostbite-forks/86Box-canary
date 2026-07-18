@@ -2478,10 +2478,7 @@ rtl8139_io_writeb(uint32_t addr, uint8_t val, void *priv)
 
     addr &= 0xFF;
     switch (addr) {
-        case MAC0 ... MAC0 + 4:
-            s->phys[addr - MAC0] = val;
-            break;
-        case MAC0 + 5:
+        case MAC0 ... MAC0 + 5:
             s->phys[addr - MAC0] = val;
             break;
         case MAC0 + 6 ... MAC0 + 7:
@@ -3235,7 +3232,7 @@ nic_init(const device_t *info)
     nmc93cxx_eeprom_params_t params;
     char          eeprom_filename[1024] = { 0 };
     char          filename[1024] = { 0 };
-    uint8_t      *mac_bytes;
+    uint8_t       mac_bytes[6];
     uint16_t     *eep_data;
     uint32_t      mac;
 
@@ -3262,7 +3259,9 @@ nic_init(const device_t *info)
     eep_data[8] = 0x124c;
     eep_data[9] = 0x1413;
 
-    mac_bytes = (uint8_t *) &(eep_data[7]);
+    mac_bytes[0] = 0x00;
+    mac_bytes[1] = 0xe0;
+    mac_bytes[2] = 0x4c;
 
     /* See if we have a local MAC address configured. */
     mac = device_get_config_mac("mac", -1);

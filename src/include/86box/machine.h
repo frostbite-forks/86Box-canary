@@ -118,6 +118,7 @@
 #define MACHINE_SCSI              0x0000000040000000ULL /* sys has int SCSI */
 #define MACHINE_USB               0x0000000080000000ULL /* sys has int USB */
 #define MACHINE_ZENITH            0x0000000100000000ULL /* sys is Zenith */
+#define MACHINE_COREBOOT          0x0000000200000000ULL /* sys has coreboot BIOS */
 /* Combined flags. */
 #define MACHINE_LPT               (MACHINE_LPT-PRI | MACHINE_LPT_SEC | \
                                    MACHINE_LPT_TER | MACHINE_LPT_QUA)
@@ -204,6 +205,8 @@ enum {
     MACHINE_TYPE_SLOT1_370,
     MACHINE_TYPE_SLOT2,
     MACHINE_TYPE_SOCKET370,
+    MACHINE_TYPE_SOCKET423,
+    MACHINE_TYPE_SOCKET478,
     MACHINE_TYPE_MISC,
     MACHINE_TYPE_MAX
 };
@@ -226,6 +229,7 @@ enum {
     MACHINE_CHIPSET_ALI_ALADDIN_IV_PLUS,
     MACHINE_CHIPSET_ALI_ALADDIN_V,
     MACHINE_CHIPSET_ALI_ALADDIN_PRO_II,
+    MACHINE_CHIPSET_AMD_750,
     MACHINE_CHIPSET_SCAT,
     MACHINE_CHIPSET_SCAT_SX,
     MACHINE_CHIPSET_NEAT,
@@ -254,6 +258,8 @@ enum {
     MACHINE_CHIPSET_INTEL_440BX,
     MACHINE_CHIPSET_INTEL_440ZX,
     MACHINE_CHIPSET_INTEL_440GX,
+    MACHINE_CHIPSET_INTEL_I815EP,
+    MACHINE_CHIPSET_INTEL_I845,
     MACHINE_CHIPSET_OPTI_283,
     MACHINE_CHIPSET_OPTI_291,
     MACHINE_CHIPSET_OPTI_381,
@@ -345,7 +351,7 @@ typedef struct _machine_ {
     uint32_t             (*gpio_acpi_handler)(uint8_t write, uint32_t val);
     const machine_cpu_t    cpu;
     uintptr_t              bus_flags;
-    uintptr_t              flags;
+    uint64_t               flags;
     const machine_memory_t ram;
     int                    ram_granularity;
     int                    nvrmask;
@@ -1297,7 +1303,9 @@ extern const device_t  ax6bc_device;
 #endif
 extern int             machine_at_ax6bc_init(const machine_t *);
 extern int             machine_at_p2bls_init(const machine_t *);
+extern int machine_at_p2bls_coreboot_init(const machine_t *);
 extern int             machine_at_p3bf_init(const machine_t *);
+extern int machine_at_p3bf_coreboot_init(const machine_t *);
 #ifdef EMU_DEVICE_H
 extern const device_t  ga686_device;
 #endif
@@ -1390,6 +1398,11 @@ extern int             machine_at_cubx_init(const machine_t *);
 /* i440ZX */
 extern int             machine_at_63a1_init(const machine_t *);
 
+/* i815EP */
+extern int machine_at_m6tsl_init(const machine_t *);
+extern int machine_at_m6tss_init(const machine_t *);
+extern int machine_at_s2080_init(const machine_t *);
+
 /* SiS 600 */
 extern int             machine_at_7sbb_init(const machine_t *);
 
@@ -1411,6 +1424,12 @@ extern const device_t  ms6318_device;
 #endif
 extern int             machine_at_ms6318_init(const machine_t *);
 extern int             machine_at_cairo5_init(const machine_t *);
+
+/* m_at_socket423.c */
+extern int             machine_at_ms6529_init(const machine_t *);
+
+/* m_at_slota.c */
+extern int machine_at_k7m_init(const machine_t *);
 
 /* m_at_misc.c */
 extern int             machine_at_vpc2007_init(const machine_t *);

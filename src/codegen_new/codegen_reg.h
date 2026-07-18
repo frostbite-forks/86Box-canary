@@ -14,6 +14,7 @@
 #define IREG_SIZE_BH       (3 << IREG_SIZE_SHIFT)
 #define IREG_SIZE_D        (4 << IREG_SIZE_SHIFT)
 #define IREG_SIZE_Q        (5 << IREG_SIZE_SHIFT)
+#define IREG_SIZE_DQ       (6 << IREG_SIZE_SHIFT)
 
 enum {
     IREG_EAX,
@@ -98,6 +99,15 @@ enum {
     IREG_MM6x,
     IREG_MM7x,
 
+    IREG_XMM0x,
+    IREG_XMM1x,
+    IREG_XMM2x,
+    IREG_XMM3x,
+    IREG_XMM4x,
+    IREG_XMM5x,
+    IREG_XMM6x,
+    IREG_XMM7x,
+
     IREG_NPXCx,
     IREG_NPXSx,
 
@@ -121,6 +131,8 @@ enum {
     IREG_eaa16,
     IREG_x87_op,
 
+    IREG_sse_xmm,
+
     IREG_FPU_TOP,
 
     /*Temporary registers are stored on the stack, and are not guaranteed to
@@ -133,6 +145,8 @@ enum {
 
     IREG_temp0d,
     IREG_temp1d,
+
+    IREG_temp0dq,
 
     IREG_COUNT,
 
@@ -181,6 +195,8 @@ enum {
     IREG_temp0_Q = IREG_temp0d + IREG_SIZE_Q,
     IREG_temp1_Q = IREG_temp1d + IREG_SIZE_Q,
 
+    IREG_temp0_DQ = IREG_temp0dq + IREG_SIZE_DQ,
+
     IREG_eaaddr_W = IREG_eaaddr + IREG_SIZE_W,
 
     IREG_CS_seg_W = IREG_CS_seg + IREG_SIZE_W,
@@ -198,6 +214,15 @@ enum {
     IREG_MM5 = IREG_MM5x + IREG_SIZE_Q,
     IREG_MM6 = IREG_MM6x + IREG_SIZE_Q,
     IREG_MM7 = IREG_MM7x + IREG_SIZE_Q,
+
+    IREG_XMM0 = IREG_XMM0x + IREG_SIZE_DQ,
+    IREG_XMM1 = IREG_XMM1x + IREG_SIZE_DQ,
+    IREG_XMM2 = IREG_XMM2x + IREG_SIZE_DQ,
+    IREG_XMM3 = IREG_XMM3x + IREG_SIZE_DQ,
+    IREG_XMM4 = IREG_XMM4x + IREG_SIZE_DQ,
+    IREG_XMM5 = IREG_XMM5x + IREG_SIZE_DQ,
+    IREG_XMM6 = IREG_XMM6x + IREG_SIZE_DQ,
+    IREG_XMM7 = IREG_XMM7x + IREG_SIZE_DQ,
 
     IREG_NPXC = IREG_NPXCx + IREG_SIZE_W,
     IREG_NPXS = IREG_NPXSx + IREG_SIZE_W,
@@ -218,6 +243,8 @@ enum {
 #define IREG_tag_B(r)              (IREG_tag0 + ((cpu_state.TOP + (r)) & 7) + IREG_SIZE_B)
 
 #define IREG_MM(reg)               ((reg) + IREG_MM0)
+
+#define IREG_XMM(reg)              ((reg) + IREG_XMM0)
 
 #define IREG_TOP_diff_stack_offset 32
 

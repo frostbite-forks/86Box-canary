@@ -42,6 +42,7 @@
 #include <86box/thread.h>
 #include <86box/network.h>
 #include <86box/pci.h>
+#include <86box/apic.h>
 
 /* i430HX */
 int
@@ -125,6 +126,7 @@ machine_at_p65up5_common_init(const machine_t *model, const device_t *northbridg
     device_add_params(&w83877_device, (void *) (W83877F | W83877_3F0));
     device_add(&sst_flash_29ee010_device);
     device_add(&ioapic_device);
+    device_add(&i82093aa_ioapic_device);
 }
 
 int

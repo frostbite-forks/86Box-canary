@@ -634,6 +634,228 @@ next_ins:
 #endif
 
 static int
+sf_FISTTPiw_a16(uint32_t fetchdat)
+{
+    struct softfloat_status_t status;
+    uint16_t                  sw       = fpu_state.swd;
+    int16_t                   save_reg = int16_indefinite;
+
+    FP_ENTER();
+    FPU_check_pending_exceptions();
+    fetch_ea_16(fetchdat);
+    SEG_CHECK_WRITE(cpu_state.ea_seg);
+    clear_C1();
+    if (IS_TAG_EMPTY(0)) {
+        FPU_exception(fetchdat, FPU_EX_Stack_Underflow, 0);
+        if (!is_IA_masked())
+            goto next_ins;
+    } else {
+        status   = i387cw_to_softfloat_status_word(i387_get_control_word());
+        save_reg = extF80_to_i16_round_to_zero(FPU_read_regi(0), &status);
+        if (FPU_exception(fetchdat, status.softfloat_exceptionFlags, 1)) {
+            goto next_ins;
+        }
+    }
+    // store to the memory might generate an exception, in this case original FPU_SW must be kept
+    swap_values16u(sw, fpu_state.swd);
+    seteaw(save_reg);
+    if (cpu_state.abrt)
+        return 1;
+    fpu_state.swd = sw;
+    FPU_pop();
+
+next_ins:
+    CLOCK_CYCLES_FPU((fpu_type >= FPU_487SX) ? (x87_timings.fist_16) : (x87_timings.fist_16 * cpu_multi));
+    CONCURRENCY_CYCLES((fpu_type >= FPU_487SX) ? (x87_concurrency.fist_16) : (x87_concurrency.fist_16 * cpu_multi));
+    return 0;
+}
+#ifndef FPU_8087
+static int
+sf_FISTTPiw_a32(uint32_t fetchdat)
+{
+    struct softfloat_status_t status;
+    uint16_t                  sw       = fpu_state.swd;
+    int16_t                   save_reg = int16_indefinite;
+
+    FP_ENTER();
+    FPU_check_pending_exceptions();
+    fetch_ea_32(fetchdat);
+    SEG_CHECK_WRITE(cpu_state.ea_seg);
+    clear_C1();
+    if (IS_TAG_EMPTY(0)) {
+        FPU_exception(fetchdat, FPU_EX_Stack_Underflow, 0);
+        if (!is_IA_masked())
+            goto next_ins;
+    } else {
+        status   = i387cw_to_softfloat_status_word(i387_get_control_word());
+        save_reg = extF80_to_i16_round_to_zero(FPU_read_regi(0), &status);
+        if (FPU_exception(fetchdat, status.softfloat_exceptionFlags, 1))
+            goto next_ins;
+    }
+    // store to the memory might generate an exception, in this case original FPU_SW must be kept
+    swap_values16u(sw, fpu_state.swd);
+    seteaw(save_reg);
+    if (cpu_state.abrt)
+        return 1;
+    fpu_state.swd = sw;
+    FPU_pop();
+
+next_ins:
+    CLOCK_CYCLES_FPU((fpu_type >= FPU_487SX) ? (x87_timings.fist_16) : (x87_timings.fist_16 * cpu_multi));
+    CONCURRENCY_CYCLES((fpu_type >= FPU_487SX) ? (x87_concurrency.fist_16) : (x87_concurrency.fist_16 * cpu_multi));
+    return 0;
+}
+#endif
+
+static int
+sf_FISTTPil_a16(uint32_t fetchdat)
+{
+    struct softfloat_status_t status;
+    uint16_t                  sw       = fpu_state.swd;
+    int32_t                   save_reg = int32_indefinite;
+
+    FP_ENTER();
+    FPU_check_pending_exceptions();
+    fetch_ea_16(fetchdat);
+    SEG_CHECK_WRITE(cpu_state.ea_seg);
+    clear_C1();
+    if (IS_TAG_EMPTY(0)) {
+        FPU_exception(fetchdat, FPU_EX_Stack_Underflow, 0);
+        if (!is_IA_masked())
+            goto next_ins;
+    } else {
+        status   = i387cw_to_softfloat_status_word(i387_get_control_word());
+        save_reg = extF80_to_i32_round_to_zero(FPU_read_regi(0), &status);
+        if (FPU_exception(fetchdat, status.softfloat_exceptionFlags, 1)) {
+            goto next_ins;
+        }
+    }
+    // store to the memory might generate an exception, in this case original FPU_SW must be kept
+    swap_values16u(sw, fpu_state.swd);
+    seteal(save_reg);
+    if (cpu_state.abrt)
+        return 1;
+    fpu_state.swd = sw;
+    FPU_pop();
+
+next_ins:
+    CLOCK_CYCLES_FPU((fpu_type >= FPU_487SX) ? (x87_timings.fist_16) : (x87_timings.fist_16 * cpu_multi));
+    CONCURRENCY_CYCLES((fpu_type >= FPU_487SX) ? (x87_concurrency.fist_16) : (x87_concurrency.fist_16 * cpu_multi));
+    return 0;
+}
+#ifndef FPU_8087
+static int
+sf_FISTTPil_a32(uint32_t fetchdat)
+{
+    struct softfloat_status_t status;
+    uint16_t                  sw       = fpu_state.swd;
+    int32_t                   save_reg = int32_indefinite;
+
+    FP_ENTER();
+    FPU_check_pending_exceptions();
+    fetch_ea_32(fetchdat);
+    SEG_CHECK_WRITE(cpu_state.ea_seg);
+    clear_C1();
+    if (IS_TAG_EMPTY(0)) {
+        FPU_exception(fetchdat, FPU_EX_Stack_Underflow, 0);
+        if (!is_IA_masked())
+            goto next_ins;
+    } else {
+        status   = i387cw_to_softfloat_status_word(i387_get_control_word());
+        save_reg = extF80_to_i32_round_to_zero(FPU_read_regi(0), &status);
+        if (FPU_exception(fetchdat, status.softfloat_exceptionFlags, 1))
+            goto next_ins;
+    }
+    // store to the memory might generate an exception, in this case original FPU_SW must be kept
+    swap_values16u(sw, fpu_state.swd);
+    seteal(save_reg);
+    if (cpu_state.abrt)
+        return 1;
+    fpu_state.swd = sw;
+    FPU_pop();
+
+next_ins:
+    CLOCK_CYCLES_FPU((fpu_type >= FPU_487SX) ? (x87_timings.fist_16) : (x87_timings.fist_16 * cpu_multi));
+    CONCURRENCY_CYCLES((fpu_type >= FPU_487SX) ? (x87_concurrency.fist_16) : (x87_concurrency.fist_16 * cpu_multi));
+    return 0;
+}
+#endif
+
+static int
+sf_FISTTPiq_a16(uint32_t fetchdat)
+{
+    struct softfloat_status_t status;
+    uint16_t                  sw       = fpu_state.swd;
+    int64_t                   save_reg = int64_indefinite;
+
+    FP_ENTER();
+    FPU_check_pending_exceptions();
+    fetch_ea_16(fetchdat);
+    SEG_CHECK_WRITE(cpu_state.ea_seg);
+    clear_C1();
+    if (IS_TAG_EMPTY(0)) {
+        FPU_exception(fetchdat, FPU_EX_Stack_Underflow, 0);
+        if (!is_IA_masked())
+            goto next_ins;
+    } else {
+        status   = i387cw_to_softfloat_status_word(i387_get_control_word());
+        save_reg = extF80_to_i64_round_to_zero(FPU_read_regi(0), &status);
+        if (FPU_exception(fetchdat, status.softfloat_exceptionFlags, 1)) {
+            goto next_ins;
+        }
+    }
+    // store to the memory might generate an exception, in this case original FPU_SW must be kept
+    swap_values16u(sw, fpu_state.swd);
+    seteaq(save_reg);
+    if (cpu_state.abrt)
+        return 1;
+    fpu_state.swd = sw;
+    FPU_pop();
+
+next_ins:
+    CLOCK_CYCLES_FPU((fpu_type >= FPU_487SX) ? (x87_timings.fist_16) : (x87_timings.fist_16 * cpu_multi));
+    CONCURRENCY_CYCLES((fpu_type >= FPU_487SX) ? (x87_concurrency.fist_16) : (x87_concurrency.fist_16 * cpu_multi));
+    return 0;
+}
+#ifndef FPU_8087
+static int
+sf_FISTTPiq_a32(uint32_t fetchdat)
+{
+    struct softfloat_status_t status;
+    uint16_t                  sw       = fpu_state.swd;
+    int64_t                   save_reg = int64_indefinite;
+
+    FP_ENTER();
+    FPU_check_pending_exceptions();
+    fetch_ea_32(fetchdat);
+    SEG_CHECK_WRITE(cpu_state.ea_seg);
+    clear_C1();
+    if (IS_TAG_EMPTY(0)) {
+        FPU_exception(fetchdat, FPU_EX_Stack_Underflow, 0);
+        if (!is_IA_masked())
+            goto next_ins;
+    } else {
+        status   = i387cw_to_softfloat_status_word(i387_get_control_word());
+        save_reg = extF80_to_i64_round_to_zero(FPU_read_regi(0), &status);
+        if (FPU_exception(fetchdat, status.softfloat_exceptionFlags, 1))
+            goto next_ins;
+    }
+    // store to the memory might generate an exception, in this case original FPU_SW must be kept
+    swap_values16u(sw, fpu_state.swd);
+    seteaq(save_reg);
+    if (cpu_state.abrt)
+        return 1;
+    fpu_state.swd = sw;
+    FPU_pop();
+
+next_ins:
+    CLOCK_CYCLES_FPU((fpu_type >= FPU_487SX) ? (x87_timings.fist_16) : (x87_timings.fist_16 * cpu_multi));
+    CONCURRENCY_CYCLES((fpu_type >= FPU_487SX) ? (x87_concurrency.fist_16) : (x87_concurrency.fist_16 * cpu_multi));
+    return 0;
+}
+#endif
+
+static int
 sf_FISTil_a16(uint32_t fetchdat)
 {
     struct softfloat_status_t status;

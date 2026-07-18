@@ -1869,10 +1869,9 @@ nuked_opl3_drv_update(void *priv)
                         &dev->buffer[dev->pos * 2],
                         music_pos_global - dev->pos);
 
-    for (; dev->pos < music_pos_global; dev->pos++) {
-        dev->buffer[dev->pos * 2] /= 2;
-        dev->buffer[(dev->pos * 2) + 1] /= 2;
-    }
+    /* No attenuation here — the card mixer applies its own FM volume
+       scaling.  Pre-dividing would make OPL ~6 dB too quiet. */
+    dev->pos = music_pos_global;
 
     return dev->buffer;
 }
@@ -1889,10 +1888,8 @@ nuked_opl3_drv_update_48k(void *priv)
                                  &dev->buffer[dev->pos * 2],
                                  sound_pos_global - dev->pos);
 
-    for (; dev->pos < sound_pos_global; dev->pos++) {
-        dev->buffer[dev->pos * 2] /= 2;
-        dev->buffer[(dev->pos * 2) + 1] /= 2;
-    }
+    /* No attenuation — card mixer handles FM volume. */
+    dev->pos = sound_pos_global;
 
     return dev->buffer;
 }

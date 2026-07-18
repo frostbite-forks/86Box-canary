@@ -32,6 +32,7 @@ add_library(snd OBJECT
     snd_lpt_tndlpt.c
     snd_pssj.c
     snd_ac97_codec.c
+    snd_ac97_intel.c
     snd_ac97_via.c
     snd_ps1.c
     snd_adlib.c

@@ -42,6 +42,7 @@ sf_fx_save_stor_common(uint32_t fetchdat, int bits)
     uint32_t tag_byte;
     unsigned index;
     floatx80 reg;
+    uint32_t old_eaaddr = 0;
 
     if (CPUID < 0x650)
         return ILLEGAL(fetchdat);
@@ -52,23 +53,36 @@ sf_fx_save_stor_common(uint32_t fetchdat, int bits)
         fetch_ea_16(fetchdat);
     }
 
-    if (cpu_state.eaaddr & 0xf) {
-        x386_dynarec_log("Effective address %08X not on 16-byte boundary\n", cpu_state.eaaddr);
-        x86gpf(NULL, 0);
-        return cpu_state.abrt;
-    }
-
     fxinst = (rmdat >> 3) & 7;
 
-    if ((fxinst > 1) || (cpu_mod == 3)) {
+    if ((fxinst > 1) && !(cpu_features & CPU_FEATURE_SSE)) {
+        x86illegal();
+        return cpu_state.abrt;
+    }
+    if (((fxinst > 3) && (fxinst != 7)) && (cpu_features & CPU_FEATURE_SSE) && !(cpu_features & CPU_FEATURE_SSE2)) {
+        x86illegal();
+        return cpu_state.abrt;
+    } else if (fxinst == 4) {
         x86illegal();
         return cpu_state.abrt;
     }
 
-    FP_ENTER();
+    old_eaaddr = cpu_state.eaaddr;
 
     if (fxinst == 1) {
         /* FXRSTOR */
+
+        FP_ENTER();
+
+        if (cpu_state.eaaddr & 0xf) {
+            x386_dynarec_log("Effective address %08X not on 16-byte boundary\n", cpu_state.eaaddr);
+            x86gpf(NULL, 0);
+            return cpu_state.abrt;
+        }
+        if (cpu_mod == 3) {
+            x86illegal();
+            return cpu_state.abrt;
+        }
         fpu_state.cwd = readmemw(easeg, cpu_state.eaaddr);
         fpu_state.swd = readmemw(easeg, cpu_state.eaaddr + 2);
         fpu_state.tos = (fpu_state.swd >> 11) & 7;
@@ -114,9 +128,28 @@ sf_fx_save_stor_common(uint32_t fetchdat, int bits)
             fpu_state.swd &= ~(FPU_SW_Summary | FPU_SW_Backward);
         }
 
+        if ((cpu_features & CPU_FEATURE_SSE) && (cr4 & CR4_OSFXSR)) {
+            if (!(cpu_features & CPU_FEATURE_SSE2))
+                cpu_state.mxcsr = readmeml(easeg, old_eaaddr + 24) & 0xffbf;
+            else
+                cpu_state.mxcsr = readmeml(easeg, old_eaaddr + 24) & 0xffff;
+
+            for(int i = 0; i < 8; i++)
+            {
+                cpu_state.XMM[i].q[0] = readmemq(easeg, old_eaaddr + 0xa0 + (i << 4));
+                cpu_state.XMM[i].q[1] = readmemq(easeg, old_eaaddr + 0xa8 + (i << 4));
+            }
+        }
+
         CLOCK_CYCLES(1);
-    } else {
+    } else if (fxinst == 0) {
         /* FXSAVE */
+        FP_ENTER();
+        if (cpu_state.eaaddr & 0xf) {
+            x386_dynarec_log("Effective address %08X not on 16-byte boundary\n", cpu_state.eaaddr);
+            x86gpf(NULL, 0);
+            return cpu_state.abrt;
+        }
         writememw(easeg, cpu_state.eaaddr, i387_get_control_word());
         writememw(easeg, cpu_state.eaaddr + 2, i387_get_status_word());
         writememw(easeg, cpu_state.eaaddr + 4, pack_FPU_TW(fpu_state.tag));
@@ -165,7 +198,62 @@ sf_fx_save_stor_common(uint32_t fetchdat, int bits)
             writememw(easeg, cpu_state.eaaddr + (index * 16) + 40, fp.signExp);
         }
 
+        if ((cpu_features & CPU_FEATURE_SSE)) {
+            writememl(easeg, old_eaaddr + 24, cpu_state.mxcsr);
+            if (!(cpu_features & CPU_FEATURE_SSE2))
+                writememl(easeg, old_eaaddr + 28, 0xffbf);
+            else
+                writememl(easeg, old_eaaddr + 28, 0xffff);
+            if(cr4 & CR4_OSFXSR)
+            {
+                for(int i = 0; i < 8; i++)
+                {
+                    writememq(easeg, old_eaaddr + 0xa0 + (i << 4), cpu_state.XMM[i].q[0]);
+                    writememq(easeg, old_eaaddr + 0xa8 + (i << 4), cpu_state.XMM[i].q[1]);
+                }
+            }
+        }
+
+        CLOCK_CYCLES((cr0 & 1) ? 56 : 67);
+    } else if (fxinst == 2) {
+        if (cpu_mod == 3) {
+            x86illegal();
+            return cpu_state.abrt;
+        }
+        uint32_t src;
+
+        uint32_t mxcsr_mask = 0xffff;
+        if (!(cpu_features & CPU_FEATURE_SSE2))
+            mxcsr_mask = 0xffbf;
+
+        SEG_CHECK_READ(cpu_state.ea_seg);
+        src = readmeml(easeg, cpu_state.eaaddr);
+        if (cpu_state.abrt)
+            return 1;
+        if(src & ~mxcsr_mask)
+        {
+            x86gpf(NULL, 0);
+            return 1;
+        }
+        cpu_state.mxcsr = src;// & mxcsr_mask;
+    } else if (fxinst == 3) {
+        if (cpu_mod == 3) {
+            x86illegal();
+            return cpu_state.abrt;
+        }
+        SEG_CHECK_WRITE(cpu_state.ea_seg);
+        writememl(easeg, cpu_state.eaaddr, cpu_state.mxcsr);
+        if (cpu_state.abrt)
+            return 1;
         CLOCK_CYCLES(1);
+    }
+    else if (fxinst == 7) {
+        if((cpu_features & CPU_FEATURE_CLFLUSH) && cpu_mod != 3)
+        {
+            //Emulate CLFLUSH as a single byte read.
+            SEG_CHECK_READ(cpu_state.ea_seg);
+            (void)readmemb(easeg, cpu_state.eaaddr);
+        }
     }
 
     return cpu_state.abrt;
@@ -249,23 +337,22 @@ fx_save_stor_common(uint32_t fetchdat, int bits)
     if (CPUID < 0x650)
         return ILLEGAL(fetchdat);
 
-    FP_ENTER();
-
     if (bits == 32) {
         fetch_ea_32(fetchdat);
     } else {
         fetch_ea_16(fetchdat);
     }
 
-    if (cpu_state.eaaddr & 0xf) {
-        x386_dynarec_log("Effective address %08X not on 16-byte boundary\n", cpu_state.eaaddr);
-        x86gpf(NULL, 0);
-        return cpu_state.abrt;
-    }
-
     fxinst = (rmdat >> 3) & 7;
 
-    if ((fxinst > 1) || (cpu_mod == 3)) {
+    if ((fxinst > 1) && !(cpu_features & CPU_FEATURE_SSE)) {
+        x86illegal();
+        return cpu_state.abrt;
+    }
+    if (((fxinst > 3) && (fxinst != 7)) && (cpu_features & CPU_FEATURE_SSE) && !(cpu_features & CPU_FEATURE_SSE2)) {
+        x86illegal();
+        return cpu_state.abrt;
+    } else if (fxinst == 4) {
         x86illegal();
         return cpu_state.abrt;
     }
@@ -274,6 +361,16 @@ fx_save_stor_common(uint32_t fetchdat, int bits)
 
     if (fxinst == 1) {
         /* FXRSTOR */
+        FP_ENTER();
+        if (cpu_state.eaaddr & 0xf) {
+            x386_dynarec_log("Effective address %08X not on 16-byte boundary\n", cpu_state.eaaddr);
+            x86gpf(NULL, 0);
+            return cpu_state.abrt;
+        }
+        if (cpu_mod == 3) {
+            x86illegal();
+            return cpu_state.abrt;
+        }
         cpu_state.npxc = readmemw(easeg, cpu_state.eaaddr);
         fpus           = readmemw(easeg, cpu_state.eaaddr + 2);
         cpu_state.npxc = (cpu_state.npxc & ~FPU_CW_Reserved_Bits) | 0x0040;
@@ -297,6 +394,19 @@ fx_save_stor_common(uint32_t fetchdat, int bits)
         else
             x87_op_off = readmemw(easeg, cpu_state.eaaddr +16);
         x87_op_seg = readmemw(easeg, cpu_state.eaaddr + 20);
+
+        if ((cpu_features & CPU_FEATURE_SSE) && (cr4 & CR4_OSFXSR)) {
+            if (!(cpu_features & CPU_FEATURE_SSE2))
+                cpu_state.mxcsr = readmeml(easeg, old_eaaddr + 24) & 0xffbf;
+            else
+                cpu_state.mxcsr = readmeml(easeg, old_eaaddr + 24) & 0xffff;
+
+            for(int i = 0; i < 8; i++)
+            {
+                cpu_state.XMM[i].q[0] = readmemq(easeg, old_eaaddr + 0xa0 + (i << 4));
+                cpu_state.XMM[i].q[1] = readmemq(easeg, old_eaaddr + 0xa8 + (i << 4));
+            }
+        }
 
         for (i = 0; i <= 7; i++) {
             cpu_state.eaaddr = old_eaaddr + 32 + (i << 4);
@@ -371,8 +481,18 @@ fx_save_stor_common(uint32_t fetchdat, int bits)
         }
 
         CLOCK_CYCLES(1);
-    } else {
+    } else if (fxinst == 0) {
         /* FXSAVE */
+        FP_ENTER();
+        if (cpu_state.eaaddr & 0xf) {
+            x386_dynarec_log("Effective address %08X not on 16-byte boundary\n", cpu_state.eaaddr);
+            x86gpf(NULL, 0);
+            return cpu_state.abrt;
+        }
+        if (cpu_mod == 3) {
+            x86illegal();
+            return cpu_state.abrt;
+        }
         if ((twd & 0x0003) != 0x0003)
             ftwb |= 0x01;
         if ((twd & 0x000c) != 0x000c)
@@ -409,6 +529,22 @@ fx_save_stor_common(uint32_t fetchdat, int bits)
             writememl(easeg, cpu_state.eaaddr + 16, x87_op_off & 0xffff);
         writememw(easeg, cpu_state.eaaddr + 20, x87_op_seg);
 
+        if ((cpu_features & CPU_FEATURE_SSE)) {
+            writememl(easeg, old_eaaddr + 24, cpu_state.mxcsr);
+            if (!(cpu_features & CPU_FEATURE_SSE2))
+                writememl(easeg, old_eaaddr + 28, 0xffbf);
+            else
+                writememl(easeg, old_eaaddr + 28, 0xffff);
+            if(cr4 & CR4_OSFXSR)
+            {
+                for(int i = 0; i < 8; i++)
+                {
+                    writememq(easeg, old_eaaddr + 0xa0 + (i << 4), cpu_state.XMM[i].q[0]);
+                    writememq(easeg, old_eaaddr + 0xa8 + (i << 4), cpu_state.XMM[i].q[1]);
+                }
+            }
+        }
+
         if (cpu_state.ismmx) {
             for (i = 0; i <= 7; i++) {
                 cpu_state.eaaddr = old_eaaddr + 32 + (i << 4);
@@ -430,6 +566,52 @@ fx_save_stor_common(uint32_t fetchdat, int bits)
         cpu_state.eaaddr = old_eaaddr;
 
         CLOCK_CYCLES(1);
+    } else if (fxinst == 2) {
+        //LDMXCSR
+        if (cpu_mod == 3) {
+            x86illegal();
+            return cpu_state.abrt;
+        }
+        uint32_t src;
+
+        uint32_t mxcsr_mask = 0xffff;
+        if (!(cpu_features & CPU_FEATURE_SSE2))
+            mxcsr_mask = 0xffbf;
+
+        SEG_CHECK_READ(cpu_state.ea_seg);
+        src = readmeml(easeg, cpu_state.eaaddr);
+        if (cpu_state.abrt)
+            return 1;
+        if(src & ~mxcsr_mask)
+        {
+            x86gpf(NULL, 0);
+            return 1;
+        }
+        cpu_state.mxcsr = src;// & mxcsr_mask;
+    } else if (fxinst == 3) {
+        //STMXCSR
+        if (cpu_mod == 3) {
+            x86illegal();
+            return cpu_state.abrt;
+        }
+        SEG_CHECK_WRITE(cpu_state.ea_seg);
+        writememl(easeg, cpu_state.eaaddr, cpu_state.mxcsr);
+        if (cpu_state.abrt)
+            return 1;
+        CLOCK_CYCLES(1);
+    }
+    /*else if ((fxinst == 5) || (fxinst == 6))
+    {
+        CPU_BLOCK_END();
+    }*/
+    else if (fxinst == 7) {
+        //CPU_BLOCK_END();
+        if((cpu_features & CPU_FEATURE_CLFLUSH) && cpu_mod != 3)
+        {
+            //Emulate CLFLUSH as a single byte read.
+            SEG_CHECK_READ(cpu_state.ea_seg);
+            (void)readmemb(easeg, cpu_state.eaaddr);
+        }
     }
 
     return cpu_state.abrt;

@@ -236,53 +236,54 @@
 #include <86box/rom.h>
 #include <86box/device.h>
 #include <86box/nvr.h>
+#include <86box/fdd.h>
 
 /* RTC registers and bit definitions. */
-#define RTC_SECONDS                  0
-#define RTC_ALSECONDS                1
-/* Alarm time is not set. */
-#define AL_DONTCARE               0xc0
-#define RTC_MINUTES                  2
-#define RTC_ALMINUTES                3
-#define RTC_HOURS                    4
-/* PM flag if 12h format in use. */
-#define RTC_AMPM                  0x80
-#define RTC_ALHOURS                  5
-#define RTC_DOW                      6
-#define RTC_DOM                      7
-#define RTC_MONTH                    8
-#define RTC_YEAR                     9
-#define RTC_REGA                    10
-#define REGA_UIP                  0x80
-#define REGA_DV2                  0x40
-#define REGA_DV1                  0x20
-#define REGA_DV0                  0x10
-#define REGA_DV                   0x70
-#define REGA_RS3                  0x08
-#define REGA_RS2                  0x04
-#define REGA_RS1                  0x02
-#define REGA_RS0                  0x01
-#define REGA_RS                   0x0f
-#define RTC_REGB                    11
-#define REGB_SET                  0x80
-#define REGB_PIE                  0x40
-#define REGB_AIE                  0x20
-#define REGB_UIE                  0x10
-#define REGB_SQWE                 0x08
-#define REGB_DM                   0x04
-#define REGB_2412                 0x02
-#define REGB_DSE                  0x01
-#define RTC_REGC                    12
-#define REGC_IRQF                 0x80
-#define REGC_PF                   0x40
-#define REGC_AF                   0x20
-#define REGC_UF                   0x10
-#define RTC_REGD                    13
-#define REGD_VRT                  0x80
-/* VIA VT82C586B - alarm day. */
-#define RTC_ALDAY                 0x7d
-/* VIA VT82C586B - alarm month. */
-#define RTC_ALMONTH               0x7e
+#define RTC_SECONDS        0
+#define RTC_ALSECONDS      1
+#define AL_DONTCARE        0xc0 /* Alarm time is not set */
+#define RTC_MINUTES        2
+#define RTC_ALMINUTES      3
+#define RTC_HOURS          4
+#define RTC_AMPM           0x80 /* PM flag if 12h format in use */
+#define RTC_ALHOURS        5
+#define RTC_DOW            6
+#define RTC_DOM            7
+#define RTC_MONTH          8
+#define RTC_YEAR           9
+#define RTC_REGA           10
+#define REGA_UIP           0x80
+#define REGA_DV2           0x40
+#define REGA_DV1           0x20
+#define REGA_DV0           0x10
+#define REGA_DV            0x70
+#define REGA_RS3           0x08
+#define REGA_RS2           0x04
+#define REGA_RS1           0x02
+#define REGA_RS0           0x01
+#define REGA_RS            0x0f
+#define RTC_REGB           11
+#define REGB_SET           0x80
+#define REGB_PIE           0x40
+#define REGB_AIE           0x20
+#define REGB_UIE           0x10
+#define REGB_SQWE          0x08
+#define REGB_DM            0x04
+#define REGB_2412          0x02
+#define REGB_DSE           0x01
+#define RTC_REGC           12
+#define REGC_IRQF          0x80
+#define REGC_PF            0x40
+#define REGC_AF            0x20
+#define REGC_UF            0x10
+#define RTC_REGD           13
+#define REGD_VRT           0x80
+#define RTC_FDD_TYPES      0x10
+#define RTC_INST_EQUIP     0x14
+#define RTC_CENTURY_AT     0x32 /* century register for AT etc */
+#define RTC_CENTURY_PS     0x37 /* century register for PS/1 PS/2 */
+#define RTC_ALDAY          0x7D /* VIA VT82C586B - alarm day */
+#define RTC_ALMONTH        0x7E /* VIA VT82C586B - alarm month */
 
 /* Day of Month Alarm for SiS. */
 #define RTC_ALDAY_SIS             0x7e
@@ -482,7 +483,7 @@ timer_update(void *priv)
 
         /* Schedule the end of the update. */
         local->ecount = 1984ULL * TIMER_USEC;
-        timer_set_delay_u64(&local->update_timer, local->ecount);
+        timer_advance_u64(&local->update_timer, local->ecount);
     } else {
         /*
          * The flag and interrupt should be issued
@@ -965,6 +966,50 @@ nvr_start(nvr_t *nvr)
     if (default_found == nvr->size)
         nvr->regs[0x0e] = 0xff; /* If load failed or it loaded an uninitialized NVR,
                                    mark everything as bad. */
+
+    if (machines[machine].flags & MACHINE_COREBOOT) {
+        /* Sync floppy drive types on coreboot machines, as SeaBIOS
+           lacks a setup utility and just leaves these untouched. */
+        uint8_t fdd;
+
+        nvr->regs[RTC_FDD_TYPES] = 0x00;
+        nvr->regs[RTC_INST_EQUIP] |= 0xc0;
+
+        for (uint8_t i = 0; i <= 1; i++) {
+            if (!fdd_get_type(i))
+                continue; /* No floppy drive. */
+
+            if (fdd_is_525(i)) {
+                if (fdd_is_hd(i))
+                    fdd = 2; /* 1.2 MB */
+                else if (fdd_doublestep_40(i))
+                    fdd = 3; /* 720 KB */
+                else
+                    fdd = 1; /* 360 KB */
+            } else {
+                if (fdd_is_hd(i))
+                    fdd = 4; /* 1.44 MB */
+                else if (fdd_is_double_sided(i))
+                    fdd = 3; /* 720 KB */
+                else
+                    fdd = 1; /* 360 KB */
+            }
+
+            nvr->regs[RTC_FDD_TYPES] |= (fdd << ((1 - i) * 4));
+            nvr->regs[RTC_INST_EQUIP] &= 0x3f; /* At least one drive installed. */
+        }
+
+        if ((nvr->regs[RTC_FDD_TYPES] >> 4) && (nvr->regs[RTC_FDD_TYPES] & 0xf))
+            nvr->regs[RTC_INST_EQUIP] |= 0x40; /* Two drives installed. */
+
+        /* Re-compute CMOS checksum. SeaBIOS doesn't care
+           about the checksum either, but Windows does. */
+        uint16_t checksum = 0;
+        for (uint8_t i = 0x10; i <= 0x2d; i++)
+            checksum += nvr->regs[i];
+        nvr->regs[0x2e] = (checksum >> 8);
+        nvr->regs[0x2f] = checksum;
+    }
 
     /* Initialize the internal and chip times. */
     if (time_sync & TIME_SYNC_ENABLED) {

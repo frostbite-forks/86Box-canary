@@ -27,6 +27,8 @@ add_library(utils OBJECT
     log.c
     random.c
 
+    # VIDEO
+    video/video_rop.c
 )
 
 add_library(mdsx_dll OBJECT

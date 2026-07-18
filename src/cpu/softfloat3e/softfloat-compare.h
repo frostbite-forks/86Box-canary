@@ -52,14 +52,14 @@ static __inline int f16_eq_ordered_quiet(float16 a, float16 b, struct softfloat_
 // 0x01
 static __inline int f16_lt_ordered_signalling(float16 a, float16 b, struct softfloat_status_t *status)
 {
-   int relation = f16_compare(a, b, status);
+   int relation = f16_compare_normal(a, b, status);
    return (relation == softfloat_relation_less);
 }
 
 // 0x02
 static __inline int f16_le_ordered_signalling(float16 a, float16 b, struct softfloat_status_t *status)
 {
-   int relation = f16_compare(a, b, status);
+   int relation = f16_compare_normal(a, b, status);
    return (relation == softfloat_relation_less) || (relation == softfloat_relation_equal);
 }
 
@@ -80,14 +80,14 @@ static __inline int f16_neq_unordered_quiet(float16 a, float16 b, struct softflo
 // 0x05
 static __inline int f16_nlt_unordered_signalling(float16 a, float16 b, struct softfloat_status_t *status)
 {
-   int relation = f16_compare(a, b, status);
+   int relation = f16_compare_normal(a, b, status);
    return (relation != softfloat_relation_less);
 }
 
 // 0x06
 static __inline int f16_nle_unordered_signalling(float16 a, float16 b, struct softfloat_status_t *status)
 {
-   int relation = f16_compare(a, b, status);
+   int relation = f16_compare_normal(a, b, status);
    return (relation != softfloat_relation_less) && (relation != softfloat_relation_equal);
 }
 
@@ -108,14 +108,14 @@ static __inline int f16_eq_unordered_quiet(float16 a, float16 b, struct softfloa
 // 0x09
 static __inline int f16_nge_unordered_signalling(float16 a, float16 b, struct softfloat_status_t *status)
 {
-   int relation = f16_compare(a, b, status);
+   int relation = f16_compare_normal(a, b, status);
    return (relation == softfloat_relation_less) || (relation == softfloat_relation_unordered);
 }
 
 // 0x0a
 static __inline int f16_ngt_unordered_signalling(float16 a, float16 b, struct softfloat_status_t *status)
 {
-   int relation = f16_compare(a, b, status);
+   int relation = f16_compare_normal(a, b, status);
    return (relation != softfloat_relation_greater);
 }
 
@@ -136,14 +136,14 @@ static __inline int f16_neq_ordered_quiet(float16 a, float16 b, struct softfloat
 // 0x0d
 static __inline int f16_ge_ordered_signalling(float16 a, float16 b, struct softfloat_status_t *status)
 {
-   int relation = f16_compare(a, b, status);
+   int relation = f16_compare_normal(a, b, status);
    return (relation == softfloat_relation_greater) || (relation == softfloat_relation_equal);
 }
 
 // 0x0e
 static __inline int f16_gt_ordered_signalling(float16 a, float16 b, struct softfloat_status_t *status)
 {
-   int relation = f16_compare(a, b, status);
+   int relation = f16_compare_normal(a, b, status);
    return (relation == softfloat_relation_greater);
 }
 
@@ -157,7 +157,7 @@ static __inline int f16_true_quiet(float16 a, float16 b, struct softfloat_status
 // 0x10
 static __inline int f16_eq_ordered_signalling(float16 a, float16 b, struct softfloat_status_t *status)
 {
-   int relation = f16_compare(a, b, status);
+   int relation = f16_compare_normal(a, b, status);
    return (relation == softfloat_relation_equal);
 }
 
@@ -178,14 +178,14 @@ static __inline int f16_le_ordered_quiet(float16 a, float16 b, struct softfloat_
 // 0x13
 static __inline int f16_unordered_signalling(float16 a, float16 b, struct softfloat_status_t *status)
 {
-   int relation = f16_compare(a, b, status);
+   int relation = f16_compare_normal(a, b, status);
    return (relation == softfloat_relation_unordered);
 }
 
 // 0x14
 static __inline int f16_neq_unordered_signalling(float16 a, float16 b, struct softfloat_status_t *status)
 {
-   int relation = f16_compare(a, b, status);
+   int relation = f16_compare_normal(a, b, status);
    return (relation != softfloat_relation_equal);
 }
 
@@ -206,14 +206,14 @@ static __inline int f16_nle_unordered_quiet(float16 a, float16 b, struct softflo
 // 0x17
 static __inline int f16_ordered_signalling(float16 a, float16 b, struct softfloat_status_t *status)
 {
-   int relation = f16_compare(a, b, status);
+   int relation = f16_compare_normal(a, b, status);
    return (relation != softfloat_relation_unordered);
 }
 
 // 0x18
 static __inline int f16_eq_unordered_signalling(float16 a, float16 b, struct softfloat_status_t *status)
 {
-   int relation = f16_compare(a, b, status);
+   int relation = f16_compare_normal(a, b, status);
    return (relation == softfloat_relation_equal) || (relation == softfloat_relation_unordered);
 }
 
@@ -234,14 +234,14 @@ static __inline int f16_ngt_unordered_quiet(float16 a, float16 b, struct softflo
 // 0x1b
 static __inline int f16_false_signalling(float16 a, float16 b, struct softfloat_status_t *status)
 {
-   f16_compare(a, b, status);
+   f16_compare_normal(a, b, status);
    return 0;
 }
 
 // 0x1c
 static __inline int f16_neq_ordered_signalling(float16 a, float16 b, struct softfloat_status_t *status)
 {
-   int relation = f16_compare(a, b, status);
+   int relation = f16_compare_normal(a, b, status);
    return (relation != softfloat_relation_equal) && (relation != softfloat_relation_unordered);
 }
 
@@ -262,7 +262,7 @@ static __inline int f16_gt_ordered_quiet(float16 a, float16 b, struct softfloat_
 // 0x1f
 static __inline int f16_true_signalling(float16 a, float16 b, struct softfloat_status_t *status)
 {
-   f16_compare(a, b, status);
+   f16_compare_normal(a, b, status);
    return 1;
 }
 
@@ -280,14 +280,14 @@ static __inline int f32_eq_ordered_quiet(float32 a, float32 b, struct softfloat_
 // 0x01
 static __inline int f32_lt_ordered_signalling(float32 a, float32 b, struct softfloat_status_t *status)
 {
-   int relation = f32_compare(a, b, status);
+   int relation = f32_compare_normal(a, b, status);
    return (relation == softfloat_relation_less);
 }
 
 // 0x02
 static __inline int f32_le_ordered_signalling(float32 a, float32 b, struct softfloat_status_t *status)
 {
-   int relation = f32_compare(a, b, status);
+   int relation = f32_compare_normal(a, b, status);
    return (relation == softfloat_relation_less) || (relation == softfloat_relation_equal);
 }
 
@@ -308,14 +308,14 @@ static __inline int f32_neq_unordered_quiet(float32 a, float32 b, struct softflo
 // 0x05
 static __inline int f32_nlt_unordered_signalling(float32 a, float32 b, struct softfloat_status_t *status)
 {
-   int relation = f32_compare(a, b, status);
+   int relation = f32_compare_normal(a, b, status);
    return (relation != softfloat_relation_less);
 }
 
 // 0x06
 static __inline int f32_nle_unordered_signalling(float32 a, float32 b, struct softfloat_status_t *status)
 {
-   int relation = f32_compare(a, b, status);
+   int relation = f32_compare_normal(a, b, status);
    return (relation != softfloat_relation_less) && (relation != softfloat_relation_equal);
 }
 
@@ -336,14 +336,14 @@ static __inline int f32_eq_unordered_quiet(float32 a, float32 b, struct softfloa
 // 0x09
 static __inline int f32_nge_unordered_signalling(float32 a, float32 b, struct softfloat_status_t *status)
 {
-   int relation = f32_compare(a, b, status);
+   int relation = f32_compare_normal(a, b, status);
    return (relation == softfloat_relation_less) || (relation == softfloat_relation_unordered);
 }
 
 // 0x0a
 static __inline int f32_ngt_unordered_signalling(float32 a, float32 b, struct softfloat_status_t *status)
 {
-   int relation = f32_compare(a, b, status);
+   int relation = f32_compare_normal(a, b, status);
    return (relation != softfloat_relation_greater);
 }
 
@@ -364,14 +364,14 @@ static __inline int f32_neq_ordered_quiet(float32 a, float32 b, struct softfloat
 // 0x0d
 static __inline int f32_ge_ordered_signalling(float32 a, float32 b, struct softfloat_status_t *status)
 {
-   int relation = f32_compare(a, b, status);
+   int relation = f32_compare_normal(a, b, status);
    return (relation == softfloat_relation_greater) || (relation == softfloat_relation_equal);
 }
 
 // 0x0e
 static __inline int f32_gt_ordered_signalling(float32 a, float32 b, struct softfloat_status_t *status)
 {
-   int relation = f32_compare(a, b, status);
+   int relation = f32_compare_normal(a, b, status);
    return (relation == softfloat_relation_greater);
 }
 
@@ -385,7 +385,7 @@ static __inline int f32_true_quiet(float32 a, float32 b, struct softfloat_status
 // 0x10
 static __inline int f32_eq_ordered_signalling(float32 a, float32 b, struct softfloat_status_t *status)
 {
-   int relation = f32_compare(a, b, status);
+   int relation = f32_compare_normal(a, b, status);
    return (relation == softfloat_relation_equal);
 }
 
@@ -406,14 +406,14 @@ static __inline int f32_le_ordered_quiet(float32 a, float32 b, struct softfloat_
 // 0x13
 static __inline int f32_unordered_signalling(float32 a, float32 b, struct softfloat_status_t *status)
 {
-   int relation = f32_compare(a, b, status);
+   int relation = f32_compare_normal(a, b, status);
    return (relation == softfloat_relation_unordered);
 }
 
 // 0x14
 static __inline int f32_neq_unordered_signalling(float32 a, float32 b, struct softfloat_status_t *status)
 {
-   int relation = f32_compare(a, b, status);
+   int relation = f32_compare_normal(a, b, status);
    return (relation != softfloat_relation_equal);
 }
 
@@ -434,14 +434,14 @@ static __inline int f32_nle_unordered_quiet(float32 a, float32 b, struct softflo
 // 0x17
 static __inline int f32_ordered_signalling(float32 a, float32 b, struct softfloat_status_t *status)
 {
-   int relation = f32_compare(a, b, status);
+   int relation = f32_compare_normal(a, b, status);
    return (relation != softfloat_relation_unordered);
 }
 
 // 0x18
 static __inline int f32_eq_unordered_signalling(float32 a, float32 b, struct softfloat_status_t *status)
 {
-   int relation = f32_compare(a, b, status);
+   int relation = f32_compare_normal(a, b, status);
    return (relation == softfloat_relation_equal) || (relation == softfloat_relation_unordered);
 }
 
@@ -462,14 +462,14 @@ static __inline int f32_ngt_unordered_quiet(float32 a, float32 b, struct softflo
 // 0x1b
 static __inline int f32_false_signalling(float32 a, float32 b, struct softfloat_status_t *status)
 {
-   f32_compare(a, b, status);
+   f32_compare_normal(a, b, status);
    return 0;
 }
 
 // 0x1c
 static __inline int f32_neq_ordered_signalling(float32 a, float32 b, struct softfloat_status_t *status)
 {
-   int relation = f32_compare(a, b, status);
+   int relation = f32_compare_normal(a, b, status);
    return (relation != softfloat_relation_equal) && (relation != softfloat_relation_unordered);
 }
 
@@ -490,7 +490,7 @@ static __inline int f32_gt_ordered_quiet(float32 a, float32 b, struct softfloat_
 // 0x1f
 static __inline int f32_true_signalling(float32 a, float32 b, struct softfloat_status_t *status)
 {
-   f32_compare(a, b, status);
+   f32_compare_normal(a, b, status);
    return 1;
 }
 
@@ -508,14 +508,14 @@ static __inline int f64_eq_ordered_quiet(float64 a, float64 b, struct softfloat_
 // 0x01
 static __inline int f64_lt_ordered_signalling(float64 a, float64 b, struct softfloat_status_t *status)
 {
-   int relation = f64_compare(a, b, status);
+   int relation = f64_compare_normal(a, b, status);
    return (relation == softfloat_relation_less);
 }
 
 // 0x02
 static __inline int f64_le_ordered_signalling(float64 a, float64 b, struct softfloat_status_t *status)
 {
-   int relation = f64_compare(a, b, status);
+   int relation = f64_compare_normal(a, b, status);
    return (relation == softfloat_relation_less) || (relation == softfloat_relation_equal);
 }
 
@@ -536,14 +536,14 @@ static __inline int f64_neq_unordered_quiet(float64 a, float64 b, struct softflo
 // 0x05
 static __inline int f64_nlt_unordered_signalling(float64 a, float64 b, struct softfloat_status_t *status)
 {
-   int relation = f64_compare(a, b, status);
+   int relation = f64_compare_normal(a, b, status);
    return (relation != softfloat_relation_less);
 }
 
 // 0x06
 static __inline int f64_nle_unordered_signalling(float64 a, float64 b, struct softfloat_status_t *status)
 {
-   int relation = f64_compare(a, b, status);
+   int relation = f64_compare_normal(a, b, status);
    return (relation != softfloat_relation_less) && (relation != softfloat_relation_equal);
 }
 
@@ -564,14 +564,14 @@ static __inline int f64_eq_unordered_quiet(float64 a, float64 b, struct softfloa
 // 0x09
 static __inline int f64_nge_unordered_signalling(float64 a, float64 b, struct softfloat_status_t *status)
 {
-   int relation = f64_compare(a, b, status);
+   int relation = f64_compare_normal(a, b, status);
    return (relation == softfloat_relation_less) || (relation == softfloat_relation_unordered);
 }
 
 // 0x0a
 static __inline int f64_ngt_unordered_signalling(float64 a, float64 b, struct softfloat_status_t *status)
 {
-   int relation = f64_compare(a, b, status);
+   int relation = f64_compare_normal(a, b, status);
    return (relation != softfloat_relation_greater);
 }
 
@@ -592,14 +592,14 @@ static __inline int f64_neq_ordered_quiet(float64 a, float64 b, struct softfloat
 // 0x0d
 static __inline int f64_ge_ordered_signalling(float64 a, float64 b, struct softfloat_status_t *status)
 {
-   int relation = f64_compare(a, b, status);
+   int relation = f64_compare_normal(a, b, status);
    return (relation == softfloat_relation_greater) || (relation == softfloat_relation_equal);
 }
 
 // 0x0e
 static __inline int f64_gt_ordered_signalling(float64 a, float64 b, struct softfloat_status_t *status)
 {
-   int relation = f64_compare(a, b, status);
+   int relation = f64_compare_normal(a, b, status);
    return (relation == softfloat_relation_greater);
 }
 
@@ -613,7 +613,7 @@ static __inline int f64_true_quiet(float64 a, float64 b, struct softfloat_status
 // 0x10
 static __inline int f64_eq_ordered_signalling(float64 a, float64 b, struct softfloat_status_t *status)
 {
-   int relation = f64_compare(a, b, status);
+   int relation = f64_compare_normal(a, b, status);
    return (relation == softfloat_relation_equal);
 }
 
@@ -634,14 +634,14 @@ static __inline int f64_le_ordered_quiet(float64 a, float64 b, struct softfloat_
 // 0x13
 static __inline int f64_unordered_signalling(float64 a, float64 b, struct softfloat_status_t *status)
 {
-   int relation = f64_compare(a, b, status);
+   int relation = f64_compare_normal(a, b, status);
    return (relation == softfloat_relation_unordered);
 }
 
 // 0x14
 static __inline int f64_neq_unordered_signalling(float64 a, float64 b, struct softfloat_status_t *status)
 {
-   int relation = f64_compare(a, b, status);
+   int relation = f64_compare_normal(a, b, status);
    return (relation != softfloat_relation_equal);
 }
 
@@ -662,14 +662,14 @@ static __inline int f64_nle_unordered_quiet(float64 a, float64 b, struct softflo
 // 0x17
 static __inline int f64_ordered_signalling(float64 a, float64 b, struct softfloat_status_t *status)
 {
-   int relation = f64_compare(a, b, status);
+   int relation = f64_compare_normal(a, b, status);
    return (relation != softfloat_relation_unordered);
 }
 
 // 0x18
 static __inline int f64_eq_unordered_signalling(float64 a, float64 b, struct softfloat_status_t *status)
 {
-   int relation = f64_compare(a, b, status);
+   int relation = f64_compare_normal(a, b, status);
    return (relation == softfloat_relation_equal) || (relation == softfloat_relation_unordered);
 }
 
@@ -690,14 +690,14 @@ static __inline int f64_ngt_unordered_quiet(float64 a, float64 b, struct softflo
 // 0x1b
 static __inline int f64_false_signalling(float64 a, float64 b, struct softfloat_status_t *status)
 {
-   f64_compare(a, b, status);
+   f64_compare_normal(a, b, status);
    return 0;
 }
 
 // 0x1c
 static __inline int f64_neq_ordered_signalling(float64 a, float64 b, struct softfloat_status_t *status)
 {
-   int relation = f64_compare(a, b, status);
+   int relation = f64_compare_normal(a, b, status);
    return (relation != softfloat_relation_equal) && (relation != softfloat_relation_unordered);
 }
 
@@ -718,7 +718,7 @@ static __inline int f64_gt_ordered_quiet(float64 a, float64 b, struct softfloat_
 // 0x1f
 static __inline int f64_true_signalling(float64 a, float64 b, struct softfloat_status_t *status)
 {
-   f64_compare(a, b, status);
+   f64_compare_normal(a, b, status);
    return 1;
 }
 

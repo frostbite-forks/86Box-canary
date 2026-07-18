@@ -1847,6 +1847,85 @@ const OpFn OP_TABLE(sf_fpu_686_db_a32)[256] = {
         ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,
     // clang-format on
 };
+
+const OpFn OP_TABLE(sf_fpu_sse3_db_a16)[256] = {
+    // clang-format off
+        sf_FILDil_a16,  sf_FILDil_a16,  sf_FILDil_a16,  sf_FILDil_a16,  sf_FILDil_a16,  sf_FILDil_a16,  sf_FILDil_a16,  sf_FILDil_a16,
+        sf_FISTTPil_a16,  sf_FISTTPil_a16,  sf_FISTTPil_a16,  sf_FISTTPil_a16,  sf_FISTTPil_a16,  sf_FISTTPil_a16,  sf_FISTTPil_a16,  sf_FISTTPil_a16,
+        sf_FISTil_a16,  sf_FISTil_a16,  sf_FISTil_a16,  sf_FISTil_a16,  sf_FISTil_a16,  sf_FISTil_a16,  sf_FISTil_a16,  sf_FISTil_a16,
+        sf_FISTPil_a16, sf_FISTPil_a16, sf_FISTPil_a16, sf_FISTPil_a16, sf_FISTPil_a16, sf_FISTPil_a16, sf_FISTPil_a16, sf_FISTPil_a16,
+        ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,
+        sf_FLDe_a16,    sf_FLDe_a16,    sf_FLDe_a16,    sf_FLDe_a16,    sf_FLDe_a16,    sf_FLDe_a16,    sf_FLDe_a16,    sf_FLDe_a16,
+        ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,
+        sf_FSTPe_a16,   sf_FSTPe_a16,   sf_FSTPe_a16,   sf_FSTPe_a16,   sf_FSTPe_a16,   sf_FSTPe_a16,   sf_FSTPe_a16,   sf_FSTPe_a16,
+
+        sf_FILDil_a16,  sf_FILDil_a16,  sf_FILDil_a16,  sf_FILDil_a16,  sf_FILDil_a16,  sf_FILDil_a16,  sf_FILDil_a16,  sf_FILDil_a16,
+        sf_FISTTPil_a16,  sf_FISTTPil_a16,  sf_FISTTPil_a16,  sf_FISTTPil_a16,  sf_FISTTPil_a16,  sf_FISTTPil_a16,  sf_FISTTPil_a16,  sf_FISTTPil_a16,
+        sf_FISTil_a16,  sf_FISTil_a16,  sf_FISTil_a16,  sf_FISTil_a16,  sf_FISTil_a16,  sf_FISTil_a16,  sf_FISTil_a16,  sf_FISTil_a16,
+        sf_FISTPil_a16, sf_FISTPil_a16, sf_FISTPil_a16, sf_FISTPil_a16, sf_FISTPil_a16, sf_FISTPil_a16, sf_FISTPil_a16, sf_FISTPil_a16,
+        ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,
+        sf_FLDe_a16,    sf_FLDe_a16,    sf_FLDe_a16,    sf_FLDe_a16,    sf_FLDe_a16,    sf_FLDe_a16,    sf_FLDe_a16,    sf_FLDe_a16,
+        ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,
+        sf_FSTPe_a16,   sf_FSTPe_a16,   sf_FSTPe_a16,   sf_FSTPe_a16,   sf_FSTPe_a16,   sf_FSTPe_a16,   sf_FSTPe_a16,   sf_FSTPe_a16,
+
+        sf_FILDil_a16,  sf_FILDil_a16,  sf_FILDil_a16,  sf_FILDil_a16,  sf_FILDil_a16,  sf_FILDil_a16,  sf_FILDil_a16,  sf_FILDil_a16,
+        sf_FISTTPil_a16,  sf_FISTTPil_a16,  sf_FISTTPil_a16,  sf_FISTTPil_a16,  sf_FISTTPil_a16,  sf_FISTTPil_a16,  sf_FISTTPil_a16,  sf_FISTTPil_a16,
+        sf_FISTil_a16,  sf_FISTil_a16,  sf_FISTil_a16,  sf_FISTil_a16,  sf_FISTil_a16,  sf_FISTil_a16,  sf_FISTil_a16,  sf_FISTil_a16,
+        sf_FISTPil_a16, sf_FISTPil_a16, sf_FISTPil_a16, sf_FISTPil_a16, sf_FISTPil_a16, sf_FISTPil_a16, sf_FISTPil_a16, sf_FISTPil_a16,
+        ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,
+        sf_FLDe_a16,    sf_FLDe_a16,    sf_FLDe_a16,    sf_FLDe_a16,    sf_FLDe_a16,    sf_FLDe_a16,    sf_FLDe_a16,    sf_FLDe_a16,
+        ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,
+        sf_FSTPe_a16,   sf_FSTPe_a16,   sf_FSTPe_a16,   sf_FSTPe_a16,   sf_FSTPe_a16,   sf_FSTPe_a16,   sf_FSTPe_a16,   sf_FSTPe_a16,
+
+        sf_FCMOVNB,     sf_FCMOVNB,     sf_FCMOVNB,     sf_FCMOVNB,     sf_FCMOVNB,     sf_FCMOVNB,     sf_FCMOVNB,     sf_FCMOVNB,
+        sf_FCMOVNE,     sf_FCMOVNE,     sf_FCMOVNE,     sf_FCMOVNE,     sf_FCMOVNE,     sf_FCMOVNE,     sf_FCMOVNE,     sf_FCMOVNE,
+        sf_FCMOVNBE,    sf_FCMOVNBE,    sf_FCMOVNBE,    sf_FCMOVNBE,    sf_FCMOVNBE,    sf_FCMOVNBE,    sf_FCMOVNBE,    sf_FCMOVNBE,
+        sf_FCMOVNU,     sf_FCMOVNU,     sf_FCMOVNU,     sf_FCMOVNU,     sf_FCMOVNU,     sf_FCMOVNU,     sf_FCMOVNU,     sf_FCMOVNU,
+        sf_FNOP,        sf_FNOP,        sf_FNCLEX,       sf_FNINIT,       sf_FNOP,        sf_FNOP,        ILLEGAL_a16,       ILLEGAL_a16,
+        sf_FUCOMI_st0_stj,      sf_FUCOMI_st0_stj,      sf_FUCOMI_st0_stj,      sf_FUCOMI_st0_stj,      sf_FUCOMI_st0_stj,      sf_FUCOMI_st0_stj,      sf_FUCOMI_st0_stj,      sf_FUCOMI_st0_stj,
+        sf_FCOMI_st0_stj,       sf_FCOMI_st0_stj,       sf_FCOMI_st0_stj,       sf_FCOMI_st0_stj,       sf_FCOMI_st0_stj,       sf_FCOMI_st0_stj,       sf_FCOMI_st0_stj,       sf_FCOMI_st0_stj,
+        ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,
+    // clang-format on
+};
+const OpFn OP_TABLE(sf_fpu_sse3_db_a32)[256] = {
+    // clang-format off
+        sf_FILDil_a32,  sf_FILDil_a32,  sf_FILDil_a32,  sf_FILDil_a32,  sf_FILDil_a32,  sf_FILDil_a32,  sf_FILDil_a32,  sf_FILDil_a32,
+        sf_FISTTPil_a32,  sf_FISTTPil_a32,  sf_FISTTPil_a32,  sf_FISTTPil_a32,  sf_FISTTPil_a32,  sf_FISTTPil_a32,  sf_FISTTPil_a32,  sf_FISTTPil_a32,
+        sf_FISTil_a32,  sf_FISTil_a32,  sf_FISTil_a32,  sf_FISTil_a32,  sf_FISTil_a32,  sf_FISTil_a32,  sf_FISTil_a32,  sf_FISTil_a32,
+        sf_FISTPil_a32, sf_FISTPil_a32, sf_FISTPil_a32, sf_FISTPil_a32, sf_FISTPil_a32, sf_FISTPil_a32, sf_FISTPil_a32, sf_FISTPil_a32,
+        ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,
+        sf_FLDe_a32,    sf_FLDe_a32,    sf_FLDe_a32,    sf_FLDe_a32,    sf_FLDe_a32,    sf_FLDe_a32,    sf_FLDe_a32,    sf_FLDe_a32,
+        ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,
+        sf_FSTPe_a32,   sf_FSTPe_a32,   sf_FSTPe_a32,   sf_FSTPe_a32,   sf_FSTPe_a32,   sf_FSTPe_a32,   sf_FSTPe_a32,   sf_FSTPe_a32,
+
+        sf_FILDil_a32,  sf_FILDil_a32,  sf_FILDil_a32,  sf_FILDil_a32,  sf_FILDil_a32,  sf_FILDil_a32,  sf_FILDil_a32,  sf_FILDil_a32,
+        sf_FISTTPil_a32,  sf_FISTTPil_a32,  sf_FISTTPil_a32,  sf_FISTTPil_a32,  sf_FISTTPil_a32,  sf_FISTTPil_a32,  sf_FISTTPil_a32,  sf_FISTTPil_a32,
+        sf_FISTil_a32,  sf_FISTil_a32,  sf_FISTil_a32,  sf_FISTil_a32,  sf_FISTil_a32,  sf_FISTil_a32,  sf_FISTil_a32,  sf_FISTil_a32,
+        sf_FISTPil_a32, sf_FISTPil_a32, sf_FISTPil_a32, sf_FISTPil_a32, sf_FISTPil_a32, sf_FISTPil_a32, sf_FISTPil_a32, sf_FISTPil_a32,
+        ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,
+        sf_FLDe_a32,    sf_FLDe_a32,    sf_FLDe_a32,    sf_FLDe_a32,    sf_FLDe_a32,    sf_FLDe_a32,    sf_FLDe_a32,    sf_FLDe_a32,
+        ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,
+        sf_FSTPe_a32,   sf_FSTPe_a32,   sf_FSTPe_a32,   sf_FSTPe_a32,   sf_FSTPe_a32,   sf_FSTPe_a32,   sf_FSTPe_a32,   sf_FSTPe_a32,
+
+        sf_FILDil_a32,  sf_FILDil_a32,  sf_FILDil_a32,  sf_FILDil_a32,  sf_FILDil_a32,  sf_FILDil_a32,  sf_FILDil_a32,  sf_FILDil_a32,
+        sf_FISTTPil_a32,  sf_FISTTPil_a32,  sf_FISTTPil_a32,  sf_FISTTPil_a32,  sf_FISTTPil_a32,  sf_FISTTPil_a32,  sf_FISTTPil_a32,  sf_FISTTPil_a32,
+        sf_FISTil_a32,  sf_FISTil_a32,  sf_FISTil_a32,  sf_FISTil_a32,  sf_FISTil_a32,  sf_FISTil_a32,  sf_FISTil_a32,  sf_FISTil_a32,
+        sf_FISTPil_a32, sf_FISTPil_a32, sf_FISTPil_a32, sf_FISTPil_a32, sf_FISTPil_a32, sf_FISTPil_a32, sf_FISTPil_a32, sf_FISTPil_a32,
+        ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,
+        sf_FLDe_a32,    sf_FLDe_a32,    sf_FLDe_a32,    sf_FLDe_a32,    sf_FLDe_a32,    sf_FLDe_a32,    sf_FLDe_a32,    sf_FLDe_a32,
+        ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,
+        sf_FSTPe_a32,   sf_FSTPe_a32,   sf_FSTPe_a32,   sf_FSTPe_a32,   sf_FSTPe_a32,   sf_FSTPe_a32,   sf_FSTPe_a32,   sf_FSTPe_a32,
+
+        sf_FCMOVNB,     sf_FCMOVNB,     sf_FCMOVNB,     sf_FCMOVNB,     sf_FCMOVNB,     sf_FCMOVNB,     sf_FCMOVNB,     sf_FCMOVNB,
+        sf_FCMOVNE,     sf_FCMOVNE,     sf_FCMOVNE,     sf_FCMOVNE,     sf_FCMOVNE,     sf_FCMOVNE,     sf_FCMOVNE,     sf_FCMOVNE,
+        sf_FCMOVNBE,    sf_FCMOVNBE,    sf_FCMOVNBE,    sf_FCMOVNBE,    sf_FCMOVNBE,    sf_FCMOVNBE,    sf_FCMOVNBE,    sf_FCMOVNBE,
+        sf_FCMOVNU,     sf_FCMOVNU,     sf_FCMOVNU,     sf_FCMOVNU,     sf_FCMOVNU,     sf_FCMOVNU,     sf_FCMOVNU,     sf_FCMOVNU,
+        sf_FNOP,        sf_FNOP,        sf_FNCLEX,       sf_FNINIT,       sf_FNOP,        sf_FNOP,        ILLEGAL_a32,       ILLEGAL_a32,
+        sf_FUCOMI_st0_stj,      sf_FUCOMI_st0_stj,      sf_FUCOMI_st0_stj,      sf_FUCOMI_st0_stj,      sf_FUCOMI_st0_stj,      sf_FUCOMI_st0_stj,      sf_FUCOMI_st0_stj,      sf_FUCOMI_st0_stj,
+        sf_FCOMI_st0_stj,       sf_FCOMI_st0_stj,       sf_FCOMI_st0_stj,       sf_FCOMI_st0_stj,       sf_FCOMI_st0_stj,       sf_FCOMI_st0_stj,       sf_FCOMI_st0_stj,       sf_FCOMI_st0_stj,
+        ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,
+    // clang-format on
+};
 #    endif
 
 #    ifndef OPS_286_386
@@ -2126,11 +2205,92 @@ const OpFn OP_TABLE(sf_fpu_dd_a32)[256] = {
     // clang-format on
 };
 
+#ifndef OPS_286_386
+const OpFn OP_TABLE(sf_fpu_sse3_dd_a16)[256] = {
+    // clang-format off
+    /*0x00*/    sf_FLDd_a16,    sf_FLDd_a16,    sf_FLDd_a16,    sf_FLDd_a16,    sf_FLDd_a16,    sf_FLDd_a16,    sf_FLDd_a16,    sf_FLDd_a16,
+    /*0x08*/    sf_FISTTPiq_a16,  sf_FISTTPiq_a16,  sf_FISTTPiq_a16,  sf_FISTTPiq_a16,  sf_FISTTPiq_a16,  sf_FISTTPiq_a16,  sf_FISTTPiq_a16,  sf_FISTTPiq_a16,
+    /*0x10*/    sf_FSTd_a16,    sf_FSTd_a16,    sf_FSTd_a16,    sf_FSTd_a16,    sf_FSTd_a16,    sf_FSTd_a16,    sf_FSTd_a16,    sf_FSTd_a16,
+    /*0x18*/    sf_FSTPd_a16,   sf_FSTPd_a16,   sf_FSTPd_a16,   sf_FSTPd_a16,   sf_FSTPd_a16,   sf_FSTPd_a16,   sf_FSTPd_a16,   sf_FSTPd_a16,
+    /*0x20*/    sf_FRSTOR_a16,   sf_FRSTOR_a16,   sf_FRSTOR_a16,   sf_FRSTOR_a16,   sf_FRSTOR_a16,   sf_FRSTOR_a16,   sf_FRSTOR_a16,   sf_FRSTOR_a16,
+    /*0x28*/    ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,
+    /*0x30*/    sf_FNSAVE_a16,   sf_FNSAVE_a16,   sf_FNSAVE_a16,   sf_FNSAVE_a16,   sf_FNSAVE_a16,   sf_FNSAVE_a16,   sf_FNSAVE_a16,   sf_FNSAVE_a16,
+    /*0x38*/    sf_FNSTSW_a16,   sf_FNSTSW_a16,   sf_FNSTSW_a16,   sf_FNSTSW_a16,   sf_FNSTSW_a16,   sf_FNSTSW_a16,   sf_FNSTSW_a16,   sf_FNSTSW_a16,
+
+    /*0x40*/    sf_FLDd_a16,    sf_FLDd_a16,    sf_FLDd_a16,    sf_FLDd_a16,    sf_FLDd_a16,    sf_FLDd_a16,    sf_FLDd_a16,    sf_FLDd_a16,
+    /*0x48*/    sf_FISTTPiq_a16,  sf_FISTTPiq_a16,  sf_FISTTPiq_a16,  sf_FISTTPiq_a16,  sf_FISTTPiq_a16,  sf_FISTTPiq_a16,  sf_FISTTPiq_a16,  sf_FISTTPiq_a16,
+    /*0x50*/    sf_FSTd_a16,    sf_FSTd_a16,    sf_FSTd_a16,    sf_FSTd_a16,    sf_FSTd_a16,    sf_FSTd_a16,    sf_FSTd_a16,    sf_FSTd_a16,
+    /*0x58*/    sf_FSTPd_a16,   sf_FSTPd_a16,   sf_FSTPd_a16,   sf_FSTPd_a16,   sf_FSTPd_a16,   sf_FSTPd_a16,   sf_FSTPd_a16,   sf_FSTPd_a16,
+    /*0x60*/    sf_FRSTOR_a16,   sf_FRSTOR_a16,   sf_FRSTOR_a16,   sf_FRSTOR_a16,   sf_FRSTOR_a16,   sf_FRSTOR_a16,   sf_FRSTOR_a16,   sf_FRSTOR_a16,
+    /*0x68*/    ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,
+    /*0x70*/    sf_FNSAVE_a16,   sf_FNSAVE_a16,   sf_FNSAVE_a16,   sf_FNSAVE_a16,   sf_FNSAVE_a16,   sf_FNSAVE_a16,   sf_FNSAVE_a16,   sf_FNSAVE_a16,
+    /*0x78*/    sf_FNSTSW_a16,   sf_FNSTSW_a16,   sf_FNSTSW_a16,   sf_FNSTSW_a16,   sf_FNSTSW_a16,   sf_FNSTSW_a16,   sf_FNSTSW_a16,   sf_FNSTSW_a16,
+
+    /*0x80*/    sf_FLDd_a16,    sf_FLDd_a16,    sf_FLDd_a16,    sf_FLDd_a16,    sf_FLDd_a16,    sf_FLDd_a16,    sf_FLDd_a16,    sf_FLDd_a16,
+    /*0x88*/    sf_FISTTPiq_a16,  sf_FISTTPiq_a16,  sf_FISTTPiq_a16,  sf_FISTTPiq_a16,  sf_FISTTPiq_a16,  sf_FISTTPiq_a16,  sf_FISTTPiq_a16,  sf_FISTTPiq_a16,
+    /*0x90*/    sf_FSTd_a16,    sf_FSTd_a16,    sf_FSTd_a16,    sf_FSTd_a16,    sf_FSTd_a16,    sf_FSTd_a16,    sf_FSTd_a16,    sf_FSTd_a16,
+    /*0x98*/    sf_FSTPd_a16,   sf_FSTPd_a16,   sf_FSTPd_a16,   sf_FSTPd_a16,   sf_FSTPd_a16,   sf_FSTPd_a16,   sf_FSTPd_a16,   sf_FSTPd_a16,
+    /*0xa0*/    sf_FRSTOR_a16,   sf_FRSTOR_a16,   sf_FRSTOR_a16,   sf_FRSTOR_a16,   sf_FRSTOR_a16,   sf_FRSTOR_a16,   sf_FRSTOR_a16,   sf_FRSTOR_a16,
+    /*0xa8*/    ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,
+    /*0xb0*/    sf_FNSAVE_a16,   sf_FNSAVE_a16,   sf_FNSAVE_a16,   sf_FNSAVE_a16,   sf_FNSAVE_a16,   sf_FNSAVE_a16,   sf_FNSAVE_a16,   sf_FNSAVE_a16,
+    /*0xb8*/    sf_FNSTSW_a16,   sf_FNSTSW_a16,   sf_FNSTSW_a16,   sf_FNSTSW_a16,   sf_FNSTSW_a16,   sf_FNSTSW_a16,   sf_FNSTSW_a16,   sf_FNSTSW_a16,
+
+    /*0xc0*/    sf_FFREE_sti,       sf_FFREE_sti,       sf_FFREE_sti,       sf_FFREE_sti,       sf_FFREE_sti,       sf_FFREE_sti,       sf_FFREE_sti,       sf_FFREE_sti,
+    /*0xc8*/    sf_FXCH_sti,        sf_FXCH_sti,        sf_FXCH_sti,        sf_FXCH_sti,        sf_FXCH_sti,        sf_FXCH_sti,        sf_FXCH_sti,        sf_FXCH_sti,
+    /*0xd0*/    sf_FST_sti,         sf_FST_sti,         sf_FST_sti,         sf_FST_sti,         sf_FST_sti,         sf_FST_sti,         sf_FST_sti,         sf_FST_sti,
+    /*0xd8*/    sf_FSTP_sti,        sf_FSTP_sti,        sf_FSTP_sti,        sf_FSTP_sti,        sf_FSTP_sti,        sf_FSTP_sti,        sf_FSTP_sti,        sf_FSTP_sti,
+    /*0xe0*/    sf_FUCOM_sti,       sf_FUCOM_sti,       sf_FUCOM_sti,       sf_FUCOM_sti,       sf_FUCOM_sti,       sf_FUCOM_sti,       sf_FUCOM_sti,       sf_FUCOM_sti,
+    /*0xe8*/    sf_FUCOMP_sti,      sf_FUCOMP_sti,      sf_FUCOMP_sti,      sf_FUCOMP_sti,      sf_FUCOMP_sti,      sf_FUCOMP_sti,      sf_FUCOMP_sti,      sf_FUCOMP_sti,
+    /*0xf0*/    ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,
+    /*0xf8*/    ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,
+    // clang-format on
+};
+
+const OpFn OP_TABLE(sf_fpu_sse3_dd_a32)[256] = {
+    // clang-format off
+        sf_FLDd_a32,    sf_FLDd_a32,    sf_FLDd_a32,    sf_FLDd_a32,    sf_FLDd_a32,    sf_FLDd_a32,    sf_FLDd_a32,    sf_FLDd_a32,
+        sf_FISTTPiq_a32,  sf_FISTTPiq_a32,  sf_FISTTPiq_a32,  sf_FISTTPiq_a32,  sf_FISTTPiq_a32,  sf_FISTTPiq_a32,  sf_FISTTPiq_a32,  sf_FISTTPiq_a32,
+        sf_FSTd_a32,    sf_FSTd_a32,    sf_FSTd_a32,    sf_FSTd_a32,    sf_FSTd_a32,    sf_FSTd_a32,    sf_FSTd_a32,    sf_FSTd_a32,
+        sf_FSTPd_a32,   sf_FSTPd_a32,   sf_FSTPd_a32,   sf_FSTPd_a32,   sf_FSTPd_a32,   sf_FSTPd_a32,   sf_FSTPd_a32,   sf_FSTPd_a32,
+        sf_FRSTOR_a32,   sf_FRSTOR_a32,   sf_FRSTOR_a32,   sf_FRSTOR_a32,   sf_FRSTOR_a32,   sf_FRSTOR_a32,   sf_FRSTOR_a32,   sf_FRSTOR_a32,
+        ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,
+        sf_FNSAVE_a32,   sf_FNSAVE_a32,   sf_FNSAVE_a32,   sf_FNSAVE_a32,   sf_FNSAVE_a32,   sf_FNSAVE_a32,   sf_FNSAVE_a32,   sf_FNSAVE_a32,
+        sf_FNSTSW_a32,   sf_FNSTSW_a32,   sf_FNSTSW_a32,   sf_FNSTSW_a32,   sf_FNSTSW_a32,   sf_FNSTSW_a32,   sf_FNSTSW_a32,   sf_FNSTSW_a32,
+
+        sf_FLDd_a32,    sf_FLDd_a32,    sf_FLDd_a32,    sf_FLDd_a32,    sf_FLDd_a32,    sf_FLDd_a32,    sf_FLDd_a32,    sf_FLDd_a32,
+        sf_FISTTPiq_a32,  sf_FISTTPiq_a32,  sf_FISTTPiq_a32,  sf_FISTTPiq_a32,  sf_FISTTPiq_a32,  sf_FISTTPiq_a32,  sf_FISTTPiq_a32,  sf_FISTTPiq_a32,
+        sf_FSTd_a32,    sf_FSTd_a32,    sf_FSTd_a32,    sf_FSTd_a32,    sf_FSTd_a32,    sf_FSTd_a32,    sf_FSTd_a32,    sf_FSTd_a32,
+        sf_FSTPd_a32,   sf_FSTPd_a32,   sf_FSTPd_a32,   sf_FSTPd_a32,   sf_FSTPd_a32,   sf_FSTPd_a32,   sf_FSTPd_a32,   sf_FSTPd_a32,
+        sf_FRSTOR_a32,   sf_FRSTOR_a32,   sf_FRSTOR_a32,   sf_FRSTOR_a32,   sf_FRSTOR_a32,   sf_FRSTOR_a32,   sf_FRSTOR_a32,   sf_FRSTOR_a32,
+        ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,
+        sf_FNSAVE_a32,   sf_FNSAVE_a32,   sf_FNSAVE_a32,   sf_FNSAVE_a32,   sf_FNSAVE_a32,   sf_FNSAVE_a32,   sf_FNSAVE_a32,   sf_FNSAVE_a32,
+        sf_FNSTSW_a32,   sf_FNSTSW_a32,   sf_FNSTSW_a32,   sf_FNSTSW_a32,   sf_FNSTSW_a32,   sf_FNSTSW_a32,   sf_FNSTSW_a32,   sf_FNSTSW_a32,
+
+        sf_FLDd_a32,    sf_FLDd_a32,    sf_FLDd_a32,    sf_FLDd_a32,    sf_FLDd_a32,    sf_FLDd_a32,    sf_FLDd_a32,    sf_FLDd_a32,
+        sf_FISTTPiq_a32,  sf_FISTTPiq_a32,  sf_FISTTPiq_a32,  sf_FISTTPiq_a32,  sf_FISTTPiq_a32,  sf_FISTTPiq_a32,  sf_FISTTPiq_a32,  sf_FISTTPiq_a32,
+        sf_FSTd_a32,    sf_FSTd_a32,    sf_FSTd_a32,    sf_FSTd_a32,    sf_FSTd_a32,    sf_FSTd_a32,    sf_FSTd_a32,    sf_FSTd_a32,
+        sf_FSTPd_a32,   sf_FSTPd_a32,   sf_FSTPd_a32,   sf_FSTPd_a32,   sf_FSTPd_a32,   sf_FSTPd_a32,   sf_FSTPd_a32,   sf_FSTPd_a32,
+        sf_FRSTOR_a32,   sf_FRSTOR_a32,   sf_FRSTOR_a32,   sf_FRSTOR_a32,   sf_FRSTOR_a32,   sf_FRSTOR_a32,   sf_FRSTOR_a32,   sf_FRSTOR_a32,
+        ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,
+        sf_FNSAVE_a32,   sf_FNSAVE_a32,   sf_FNSAVE_a32,   sf_FNSAVE_a32,   sf_FNSAVE_a32,   sf_FNSAVE_a32,   sf_FNSAVE_a32,   sf_FNSAVE_a32,
+        sf_FNSTSW_a32,   sf_FNSTSW_a32,   sf_FNSTSW_a32,   sf_FNSTSW_a32,   sf_FNSTSW_a32,   sf_FNSTSW_a32,   sf_FNSTSW_a32,   sf_FNSTSW_a32,
+
+        sf_FFREE_sti,       sf_FFREE_sti,       sf_FFREE_sti,       sf_FFREE_sti,       sf_FFREE_sti,       sf_FFREE_sti,       sf_FFREE_sti,       sf_FFREE_sti,
+        sf_FXCH_sti,        sf_FXCH_sti,        sf_FXCH_sti,        sf_FXCH_sti,        sf_FXCH_sti,        sf_FXCH_sti,        sf_FXCH_sti,        sf_FXCH_sti,
+        sf_FST_sti,         sf_FST_sti,         sf_FST_sti,         sf_FST_sti,         sf_FST_sti,         sf_FST_sti,         sf_FST_sti,         sf_FST_sti,
+        sf_FSTP_sti,        sf_FSTP_sti,        sf_FSTP_sti,        sf_FSTP_sti,        sf_FSTP_sti,        sf_FSTP_sti,        sf_FSTP_sti,        sf_FSTP_sti,
+        sf_FUCOM_sti,       sf_FUCOM_sti,       sf_FUCOM_sti,       sf_FUCOM_sti,       sf_FUCOM_sti,       sf_FUCOM_sti,       sf_FUCOM_sti,       sf_FUCOM_sti,
+        sf_FUCOMP_sti,      sf_FUCOMP_sti,      sf_FUCOMP_sti,      sf_FUCOMP_sti,      sf_FUCOMP_sti,      sf_FUCOMP_sti,      sf_FUCOMP_sti,      sf_FUCOMP_sti,
+        ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,
+        ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,
+        // clang-format on
+    };
+
+
 const OpFn OP_TABLE(sf_fpu_cyrix_dd_a16)[256] = {
     // clang-format off
     /*0x00*/    sf_FLDd_a16,    sf_FLDd_a16,    sf_FLDd_a16,    sf_FLDd_a16,    sf_FLDd_a16,    sf_FLDd_a16,    sf_FLDd_a16,    sf_FLDd_a16,
-    /*0x08*/    ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,
-    /*0x10*/    sf_FSTd_a16,    sf_FSTd_a16,    sf_FSTd_a16,    sf_FSTd_a16,    sf_FSTd_a16,    sf_FSTd_a16,    sf_FSTd_a16,    sf_FSTd_a16,
+    /*0x08*/    ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,   /*0x10*/    sf_FSTd_a16,    sf_FSTd_a16,    sf_FSTd_a16,    sf_FSTd_a16,    sf_FSTd_a16,    sf_FSTd_a16,    sf_FSTd_a16,    sf_FSTd_a16,
     /*0x18*/    sf_FSTPd_a16,   sf_FSTPd_a16,   sf_FSTPd_a16,   sf_FSTPd_a16,   sf_FSTPd_a16,   sf_FSTPd_a16,   sf_FSTPd_a16,   sf_FSTPd_a16,
     /*0x20*/    sf_FRSTOR_a16,   sf_FRSTOR_a16,   sf_FRSTOR_a16,   sf_FRSTOR_a16,   sf_FRSTOR_a16,   sf_FRSTOR_a16,   sf_FRSTOR_a16,   sf_FRSTOR_a16,
     /*0x28*/    ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,
@@ -2205,6 +2365,7 @@ const OpFn OP_TABLE(sf_fpu_cyrix_dd_a32)[256] = {
         ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  sf_FRICHOP,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,
     // clang-format on
 };
+#endif
 
 const OpFn OP_TABLE(sf_fpu_287_de_a16)[256] = {
     // clang-format off
@@ -2589,6 +2750,86 @@ const OpFn OP_TABLE(sf_fpu_686_df_a32)[256] = {
 
         sf_FILDiw_a32,  sf_FILDiw_a32,  sf_FILDiw_a32,  sf_FILDiw_a32,  sf_FILDiw_a32,  sf_FILDiw_a32,  sf_FILDiw_a32,  sf_FILDiw_a32,
         ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,
+        sf_FISTiw_a32,  sf_FISTiw_a32,  sf_FISTiw_a32,  sf_FISTiw_a32,  sf_FISTiw_a32,  sf_FISTiw_a32,  sf_FISTiw_a32,  sf_FISTiw_a32,
+        sf_FISTPiw_a32, sf_FISTPiw_a32, sf_FISTPiw_a32, sf_FISTPiw_a32, sf_FISTPiw_a32, sf_FISTPiw_a32, sf_FISTPiw_a32, sf_FISTPiw_a32,
+        sf_FBLD_PACKED_BCD_a32,     sf_FBLD_PACKED_BCD_a32,     sf_FBLD_PACKED_BCD_a32,     sf_FBLD_PACKED_BCD_a32,     sf_FBLD_PACKED_BCD_a32,     sf_FBLD_PACKED_BCD_a32,     sf_FBLD_PACKED_BCD_a32,     sf_FBLD_PACKED_BCD_a32,
+        sf_FILDiq_a32,  sf_FILDiq_a32,  sf_FILDiq_a32,  sf_FILDiq_a32,  sf_FILDiq_a32,  sf_FILDiq_a32,  sf_FILDiq_a32,  sf_FILDiq_a32,
+        sf_FBSTP_PACKED_BCD_a32,     sf_FBSTP_PACKED_BCD_a32,     sf_FBSTP_PACKED_BCD_a32,     sf_FBSTP_PACKED_BCD_a32,     sf_FBSTP_PACKED_BCD_a32,     sf_FBSTP_PACKED_BCD_a32,     sf_FBSTP_PACKED_BCD_a32,     sf_FBSTP_PACKED_BCD_a32,
+        sf_FISTPiq_a32,   sf_FISTPiq_a32,   sf_FISTPiq_a32,   sf_FISTPiq_a32,   sf_FISTPiq_a32,   sf_FISTPiq_a32,   sf_FISTPiq_a32,   sf_FISTPiq_a32,
+
+        sf_FFREEP_sti,      sf_FFREEP_sti,      sf_FFREEP_sti,      sf_FFREEP_sti,      sf_FFREEP_sti,      sf_FFREEP_sti,      sf_FFREEP_sti,      sf_FFREEP_sti,
+        sf_FXCH_sti,        sf_FXCH_sti,        sf_FXCH_sti,        sf_FXCH_sti,        sf_FXCH_sti,        sf_FXCH_sti,        sf_FXCH_sti,        sf_FXCH_sti,
+        sf_FSTP_sti,        sf_FSTP_sti,        sf_FSTP_sti,        sf_FSTP_sti,        sf_FSTP_sti,        sf_FSTP_sti,        sf_FSTP_sti,        sf_FSTP_sti,
+        sf_FSTP_sti,        sf_FSTP_sti,        sf_FSTP_sti,        sf_FSTP_sti,        sf_FSTP_sti,        sf_FSTP_sti,        sf_FSTP_sti,        sf_FSTP_sti,
+        sf_FNSTSW_AX,   ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,
+        sf_FUCOMIP_st0_stj,     sf_FUCOMIP_st0_stj,     sf_FUCOMIP_st0_stj,     sf_FUCOMIP_st0_stj,     sf_FUCOMIP_st0_stj,     sf_FUCOMIP_st0_stj,     sf_FUCOMIP_st0_stj,     sf_FUCOMIP_st0_stj,
+        sf_FCOMIP_st0_stj,      sf_FCOMIP_st0_stj,      sf_FCOMIP_st0_stj,      sf_FCOMIP_st0_stj,      sf_FCOMIP_st0_stj,      sf_FCOMIP_st0_stj,      sf_FCOMIP_st0_stj,      sf_FCOMIP_st0_stj,
+        ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,
+    // clang-format on
+};
+
+const OpFn OP_TABLE(sf_fpu_sse3_df_a16)[256] = {
+    // clang-format off
+        sf_FILDiw_a16,  sf_FILDiw_a16,  sf_FILDiw_a16,  sf_FILDiw_a16,  sf_FILDiw_a16,  sf_FILDiw_a16,  sf_FILDiw_a16,  sf_FILDiw_a16,
+        sf_FISTTPiw_a16,  sf_FISTTPiw_a16,  sf_FISTTPiw_a16,  sf_FISTTPiw_a16,  sf_FISTTPiw_a16,  sf_FISTTPiw_a16,  sf_FISTTPiw_a16,  sf_FISTTPiw_a16,
+        sf_FISTiw_a16,  sf_FISTiw_a16,  sf_FISTiw_a16,  sf_FISTiw_a16,  sf_FISTiw_a16,  sf_FISTiw_a16,  sf_FISTiw_a16,  sf_FISTiw_a16,
+        sf_FISTPiw_a16, sf_FISTPiw_a16, sf_FISTPiw_a16, sf_FISTPiw_a16, sf_FISTPiw_a16, sf_FISTPiw_a16, sf_FISTPiw_a16, sf_FISTPiw_a16,
+        sf_FBLD_PACKED_BCD_a16,     sf_FBLD_PACKED_BCD_a16,     sf_FBLD_PACKED_BCD_a16,     sf_FBLD_PACKED_BCD_a16,     sf_FBLD_PACKED_BCD_a16,     sf_FBLD_PACKED_BCD_a16,     sf_FBLD_PACKED_BCD_a16,     sf_FBLD_PACKED_BCD_a16,
+        sf_FILDiq_a16,  sf_FILDiq_a16,  sf_FILDiq_a16,  sf_FILDiq_a16,  sf_FILDiq_a16,  sf_FILDiq_a16,  sf_FILDiq_a16,  sf_FILDiq_a16,
+        sf_FBSTP_PACKED_BCD_a16,     sf_FBSTP_PACKED_BCD_a16,     sf_FBSTP_PACKED_BCD_a16,     sf_FBSTP_PACKED_BCD_a16,     sf_FBSTP_PACKED_BCD_a16,     sf_FBSTP_PACKED_BCD_a16,     sf_FBSTP_PACKED_BCD_a16,     sf_FBSTP_PACKED_BCD_a16,
+        sf_FISTPiq_a16,   sf_FISTPiq_a16,   sf_FISTPiq_a16,   sf_FISTPiq_a16,   sf_FISTPiq_a16,   sf_FISTPiq_a16,   sf_FISTPiq_a16,   sf_FISTPiq_a16,
+
+        sf_FILDiw_a16,  sf_FILDiw_a16,  sf_FILDiw_a16,  sf_FILDiw_a16,  sf_FILDiw_a16,  sf_FILDiw_a16,  sf_FILDiw_a16,  sf_FILDiw_a16,
+        sf_FISTTPiw_a16,  sf_FISTTPiw_a16,  sf_FISTTPiw_a16,  sf_FISTTPiw_a16,  sf_FISTTPiw_a16,  sf_FISTTPiw_a16,  sf_FISTTPiw_a16,  sf_FISTTPiw_a16,
+        sf_FISTiw_a16,  sf_FISTiw_a16,  sf_FISTiw_a16,  sf_FISTiw_a16,  sf_FISTiw_a16,  sf_FISTiw_a16,  sf_FISTiw_a16,  sf_FISTiw_a16,
+        sf_FISTPiw_a16, sf_FISTPiw_a16, sf_FISTPiw_a16, sf_FISTPiw_a16, sf_FISTPiw_a16, sf_FISTPiw_a16, sf_FISTPiw_a16, sf_FISTPiw_a16,
+        sf_FBLD_PACKED_BCD_a16,     sf_FBLD_PACKED_BCD_a16,     sf_FBLD_PACKED_BCD_a16,     sf_FBLD_PACKED_BCD_a16,     sf_FBLD_PACKED_BCD_a16,     sf_FBLD_PACKED_BCD_a16,     sf_FBLD_PACKED_BCD_a16,     sf_FBLD_PACKED_BCD_a16,
+        sf_FILDiq_a16,  sf_FILDiq_a16,  sf_FILDiq_a16,  sf_FILDiq_a16,  sf_FILDiq_a16,  sf_FILDiq_a16,  sf_FILDiq_a16,  sf_FILDiq_a16,
+        sf_FBSTP_PACKED_BCD_a16,     sf_FBSTP_PACKED_BCD_a16,     sf_FBSTP_PACKED_BCD_a16,     sf_FBSTP_PACKED_BCD_a16,     sf_FBSTP_PACKED_BCD_a16,     sf_FBSTP_PACKED_BCD_a16,     sf_FBSTP_PACKED_BCD_a16,     sf_FBSTP_PACKED_BCD_a16,
+        sf_FISTPiq_a16,   sf_FISTPiq_a16,   sf_FISTPiq_a16,   sf_FISTPiq_a16,   sf_FISTPiq_a16,   sf_FISTPiq_a16,   sf_FISTPiq_a16,   sf_FISTPiq_a16,
+
+        sf_FILDiw_a16,  sf_FILDiw_a16,  sf_FILDiw_a16,  sf_FILDiw_a16,  sf_FILDiw_a16,  sf_FILDiw_a16,  sf_FILDiw_a16,  sf_FILDiw_a16,
+        sf_FISTTPiw_a16,  sf_FISTTPiw_a16,  sf_FISTTPiw_a16,  sf_FISTTPiw_a16,  sf_FISTTPiw_a16,  sf_FISTTPiw_a16,  sf_FISTTPiw_a16,  sf_FISTTPiw_a16,
+        sf_FISTiw_a16,  sf_FISTiw_a16,  sf_FISTiw_a16,  sf_FISTiw_a16,  sf_FISTiw_a16,  sf_FISTiw_a16,  sf_FISTiw_a16,  sf_FISTiw_a16,
+        sf_FISTPiw_a16, sf_FISTPiw_a16, sf_FISTPiw_a16, sf_FISTPiw_a16, sf_FISTPiw_a16, sf_FISTPiw_a16, sf_FISTPiw_a16, sf_FISTPiw_a16,
+        sf_FBLD_PACKED_BCD_a16,     sf_FBLD_PACKED_BCD_a16,     sf_FBLD_PACKED_BCD_a16,     sf_FBLD_PACKED_BCD_a16,     sf_FBLD_PACKED_BCD_a16,     sf_FBLD_PACKED_BCD_a16,     sf_FBLD_PACKED_BCD_a16,     sf_FBLD_PACKED_BCD_a16,
+        sf_FILDiq_a16,  sf_FILDiq_a16,  sf_FILDiq_a16,  sf_FILDiq_a16,  sf_FILDiq_a16,  sf_FILDiq_a16,  sf_FILDiq_a16,  sf_FILDiq_a16,
+        sf_FBSTP_PACKED_BCD_a16,     sf_FBSTP_PACKED_BCD_a16,     sf_FBSTP_PACKED_BCD_a16,     sf_FBSTP_PACKED_BCD_a16,     sf_FBSTP_PACKED_BCD_a16,     sf_FBSTP_PACKED_BCD_a16,     sf_FBSTP_PACKED_BCD_a16,     sf_FBSTP_PACKED_BCD_a16,
+        sf_FISTPiq_a16,   sf_FISTPiq_a16,   sf_FISTPiq_a16,   sf_FISTPiq_a16,   sf_FISTPiq_a16,   sf_FISTPiq_a16,   sf_FISTPiq_a16,   sf_FISTPiq_a16,
+
+        sf_FFREEP_sti,      sf_FFREEP_sti,      sf_FFREEP_sti,      sf_FFREEP_sti,      sf_FFREEP_sti,      sf_FFREEP_sti,      sf_FFREEP_sti,      sf_FFREEP_sti,
+        sf_FXCH_sti,        sf_FXCH_sti,        sf_FXCH_sti,        sf_FXCH_sti,        sf_FXCH_sti,        sf_FXCH_sti,        sf_FXCH_sti,        sf_FXCH_sti,
+        sf_FSTP_sti,        sf_FSTP_sti,        sf_FSTP_sti,        sf_FSTP_sti,        sf_FSTP_sti,        sf_FSTP_sti,        sf_FSTP_sti,        sf_FSTP_sti,
+        sf_FSTP_sti,        sf_FSTP_sti,        sf_FSTP_sti,        sf_FSTP_sti,        sf_FSTP_sti,        sf_FSTP_sti,        sf_FSTP_sti,        sf_FSTP_sti,
+        sf_FNSTSW_AX,   ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,
+        sf_FUCOMIP_st0_stj,     sf_FUCOMIP_st0_stj,     sf_FUCOMIP_st0_stj,     sf_FUCOMIP_st0_stj,     sf_FUCOMIP_st0_stj,     sf_FUCOMIP_st0_stj,     sf_FUCOMIP_st0_stj,     sf_FUCOMIP_st0_stj,
+        sf_FCOMIP_st0_stj,      sf_FCOMIP_st0_stj,      sf_FCOMIP_st0_stj,      sf_FCOMIP_st0_stj,      sf_FCOMIP_st0_stj,      sf_FCOMIP_st0_stj,      sf_FCOMIP_st0_stj,      sf_FCOMIP_st0_stj,
+        ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,
+    // clang-format on
+};
+
+const OpFn OP_TABLE(sf_fpu_sse3_df_a32)[256] = {
+    // clang-format off
+        sf_FILDiw_a32,  sf_FILDiw_a32,  sf_FILDiw_a32,  sf_FILDiw_a32,  sf_FILDiw_a32,  sf_FILDiw_a32,  sf_FILDiw_a32,  sf_FILDiw_a32,
+        sf_FISTTPiw_a32,  sf_FISTTPiw_a32,  sf_FISTTPiw_a32,  sf_FISTTPiw_a32,  sf_FISTTPiw_a32,  sf_FISTTPiw_a32,  sf_FISTTPiw_a32,  sf_FISTTPiw_a32,
+        sf_FISTiw_a32,  sf_FISTiw_a32,  sf_FISTiw_a32,  sf_FISTiw_a32,  sf_FISTiw_a32,  sf_FISTiw_a32,  sf_FISTiw_a32,  sf_FISTiw_a32,
+        sf_FISTPiw_a32, sf_FISTPiw_a32, sf_FISTPiw_a32, sf_FISTPiw_a32, sf_FISTPiw_a32, sf_FISTPiw_a32, sf_FISTPiw_a32, sf_FISTPiw_a32,
+        sf_FBLD_PACKED_BCD_a32,     sf_FBLD_PACKED_BCD_a32,     sf_FBLD_PACKED_BCD_a32,     sf_FBLD_PACKED_BCD_a32,     sf_FBLD_PACKED_BCD_a32,     sf_FBLD_PACKED_BCD_a32,     sf_FBLD_PACKED_BCD_a32,     sf_FBLD_PACKED_BCD_a32,
+        sf_FILDiq_a32,  sf_FILDiq_a32,  sf_FILDiq_a32,  sf_FILDiq_a32,  sf_FILDiq_a32,  sf_FILDiq_a32,  sf_FILDiq_a32,  sf_FILDiq_a32,
+        sf_FBSTP_PACKED_BCD_a32,     sf_FBSTP_PACKED_BCD_a32,     sf_FBSTP_PACKED_BCD_a32,     sf_FBSTP_PACKED_BCD_a32,     sf_FBSTP_PACKED_BCD_a32,     sf_FBSTP_PACKED_BCD_a32,     sf_FBSTP_PACKED_BCD_a32,     sf_FBSTP_PACKED_BCD_a32,
+        sf_FISTPiq_a32,   sf_FISTPiq_a32,   sf_FISTPiq_a32,   sf_FISTPiq_a32,   sf_FISTPiq_a32,   sf_FISTPiq_a32,   sf_FISTPiq_a32,   sf_FISTPiq_a32,
+
+        sf_FILDiw_a32,  sf_FILDiw_a32,  sf_FILDiw_a32,  sf_FILDiw_a32,  sf_FILDiw_a32,  sf_FILDiw_a32,  sf_FILDiw_a32,  sf_FILDiw_a32,
+        sf_FISTTPiw_a32,  sf_FISTTPiw_a32,  sf_FISTTPiw_a32,  sf_FISTTPiw_a32,  sf_FISTTPiw_a32,  sf_FISTTPiw_a32,  sf_FISTTPiw_a32,  sf_FISTTPiw_a32,
+        sf_FISTiw_a32,  sf_FISTiw_a32,  sf_FISTiw_a32,  sf_FISTiw_a32,  sf_FISTiw_a32,  sf_FISTiw_a32,  sf_FISTiw_a32,  sf_FISTiw_a32,
+        sf_FISTPiw_a32, sf_FISTPiw_a32, sf_FISTPiw_a32, sf_FISTPiw_a32, sf_FISTPiw_a32, sf_FISTPiw_a32, sf_FISTPiw_a32, sf_FISTPiw_a32,
+        sf_FBLD_PACKED_BCD_a32,     sf_FBLD_PACKED_BCD_a32,     sf_FBLD_PACKED_BCD_a32,     sf_FBLD_PACKED_BCD_a32,     sf_FBLD_PACKED_BCD_a32,     sf_FBLD_PACKED_BCD_a32,     sf_FBLD_PACKED_BCD_a32,     sf_FBLD_PACKED_BCD_a32,
+        sf_FILDiq_a32,  sf_FILDiq_a32,  sf_FILDiq_a32,  sf_FILDiq_a32,  sf_FILDiq_a32,  sf_FILDiq_a32,  sf_FILDiq_a32,  sf_FILDiq_a32,
+        sf_FBSTP_PACKED_BCD_a32,     sf_FBSTP_PACKED_BCD_a32,     sf_FBSTP_PACKED_BCD_a32,     sf_FBSTP_PACKED_BCD_a32,     sf_FBSTP_PACKED_BCD_a32,     sf_FBSTP_PACKED_BCD_a32,     sf_FBSTP_PACKED_BCD_a32,     sf_FBSTP_PACKED_BCD_a32,
+        sf_FISTPiq_a32,   sf_FISTPiq_a32,   sf_FISTPiq_a32,   sf_FISTPiq_a32,   sf_FISTPiq_a32,   sf_FISTPiq_a32,   sf_FISTPiq_a32,   sf_FISTPiq_a32,
+
+        sf_FILDiw_a32,  sf_FILDiw_a32,  sf_FILDiw_a32,  sf_FILDiw_a32,  sf_FILDiw_a32,  sf_FILDiw_a32,  sf_FILDiw_a32,  sf_FILDiw_a32,
+        sf_FISTTPiw_a32,  sf_FISTTPiw_a32,  sf_FISTTPiw_a32,  sf_FISTTPiw_a32,  sf_FISTTPiw_a32,  sf_FISTTPiw_a32,  sf_FISTTPiw_a32,  sf_FISTTPiw_a32,
         sf_FISTiw_a32,  sf_FISTiw_a32,  sf_FISTiw_a32,  sf_FISTiw_a32,  sf_FISTiw_a32,  sf_FISTiw_a32,  sf_FISTiw_a32,  sf_FISTiw_a32,
         sf_FISTPiw_a32, sf_FISTPiw_a32, sf_FISTPiw_a32, sf_FISTPiw_a32, sf_FISTPiw_a32, sf_FISTPiw_a32, sf_FISTPiw_a32, sf_FISTPiw_a32,
         sf_FBLD_PACKED_BCD_a32,     sf_FBLD_PACKED_BCD_a32,     sf_FBLD_PACKED_BCD_a32,     sf_FBLD_PACKED_BCD_a32,     sf_FBLD_PACKED_BCD_a32,     sf_FBLD_PACKED_BCD_a32,     sf_FBLD_PACKED_BCD_a32,     sf_FBLD_PACKED_BCD_a32,
@@ -3429,6 +3670,85 @@ const OpFn OP_TABLE(fpu_686_db_a32)[256] = {
         ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,
     // clang-format on
 };
+
+const OpFn OP_TABLE(fpu_sse3_db_a16)[256] = {
+    // clang-format off
+        opFILDil_a16,  opFILDil_a16,  opFILDil_a16,  opFILDil_a16,  opFILDil_a16,  opFILDil_a16,  opFILDil_a16,  opFILDil_a16,
+        opFISTTPil_a16,  opFISTTPil_a16,  opFISTTPil_a16,  opFISTTPil_a16,  opFISTTPil_a16,  opFISTTPil_a16,  opFISTTPil_a16,  opFISTTPil_a16,
+        opFISTil_a16,  opFISTil_a16,  opFISTil_a16,  opFISTil_a16,  opFISTil_a16,  opFISTil_a16,  opFISTil_a16,  opFISTil_a16,
+        opFISTPil_a16, opFISTPil_a16, opFISTPil_a16, opFISTPil_a16, opFISTPil_a16, opFISTPil_a16, opFISTPil_a16, opFISTPil_a16,
+        ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,
+        opFLDe_a16,    opFLDe_a16,    opFLDe_a16,    opFLDe_a16,    opFLDe_a16,    opFLDe_a16,    opFLDe_a16,    opFLDe_a16,
+        ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,
+        opFSTPe_a16,   opFSTPe_a16,   opFSTPe_a16,   opFSTPe_a16,   opFSTPe_a16,   opFSTPe_a16,   opFSTPe_a16,   opFSTPe_a16,
+
+        opFILDil_a16,  opFILDil_a16,  opFILDil_a16,  opFILDil_a16,  opFILDil_a16,  opFILDil_a16,  opFILDil_a16,  opFILDil_a16,
+        opFISTTPil_a16,  opFISTTPil_a16,  opFISTTPil_a16,  opFISTTPil_a16,  opFISTTPil_a16,  opFISTTPil_a16,  opFISTTPil_a16,  opFISTTPil_a16,
+        opFISTil_a16,  opFISTil_a16,  opFISTil_a16,  opFISTil_a16,  opFISTil_a16,  opFISTil_a16,  opFISTil_a16,  opFISTil_a16,
+        opFISTPil_a16, opFISTPil_a16, opFISTPil_a16, opFISTPil_a16, opFISTPil_a16, opFISTPil_a16, opFISTPil_a16, opFISTPil_a16,
+        ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,
+        opFLDe_a16,    opFLDe_a16,    opFLDe_a16,    opFLDe_a16,    opFLDe_a16,    opFLDe_a16,    opFLDe_a16,    opFLDe_a16,
+        ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,
+        opFSTPe_a16,   opFSTPe_a16,   opFSTPe_a16,   opFSTPe_a16,   opFSTPe_a16,   opFSTPe_a16,   opFSTPe_a16,   opFSTPe_a16,
+
+        opFILDil_a16,  opFILDil_a16,  opFILDil_a16,  opFILDil_a16,  opFILDil_a16,  opFILDil_a16,  opFILDil_a16,  opFILDil_a16,
+        opFISTTPil_a16,  opFISTTPil_a16,  opFISTTPil_a16,  opFISTTPil_a16,  opFISTTPil_a16,  opFISTTPil_a16,  opFISTTPil_a16,  opFISTTPil_a16,
+        opFISTil_a16,  opFISTil_a16,  opFISTil_a16,  opFISTil_a16,  opFISTil_a16,  opFISTil_a16,  opFISTil_a16,  opFISTil_a16,
+        opFISTPil_a16, opFISTPil_a16, opFISTPil_a16, opFISTPil_a16, opFISTPil_a16, opFISTPil_a16, opFISTPil_a16, opFISTPil_a16,
+        ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,
+        opFLDe_a16,    opFLDe_a16,    opFLDe_a16,    opFLDe_a16,    opFLDe_a16,    opFLDe_a16,    opFLDe_a16,    opFLDe_a16,
+        ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,
+        opFSTPe_a16,   opFSTPe_a16,   opFSTPe_a16,   opFSTPe_a16,   opFSTPe_a16,   opFSTPe_a16,   opFSTPe_a16,   opFSTPe_a16,
+
+        opFCMOVNB,     opFCMOVNB,     opFCMOVNB,     opFCMOVNB,     opFCMOVNB,     opFCMOVNB,     opFCMOVNB,     opFCMOVNB,
+        opFCMOVNE,     opFCMOVNE,     opFCMOVNE,     opFCMOVNE,     opFCMOVNE,     opFCMOVNE,     opFCMOVNE,     opFCMOVNE,
+        opFCMOVNBE,    opFCMOVNBE,    opFCMOVNBE,    opFCMOVNBE,    opFCMOVNBE,    opFCMOVNBE,    opFCMOVNBE,    opFCMOVNBE,
+        opFCMOVNU,     opFCMOVNU,     opFCMOVNU,     opFCMOVNU,     opFCMOVNU,     opFCMOVNU,     opFCMOVNU,     opFCMOVNU,
+        opFNOP,        opFNOP,        opFCLEX,       opFINIT,       opFNOP,        opFNOP,        ILLEGAL_a16,       ILLEGAL_a16,
+        opFUCOMI,      opFUCOMI,      opFUCOMI,      opFUCOMI,      opFUCOMI,      opFUCOMI,      opFUCOMI,      opFUCOMI,
+        opFCOMI,       opFCOMI,       opFCOMI,       opFCOMI,       opFCOMI,       opFCOMI,       opFCOMI,       opFCOMI,
+        ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,
+    // clang-format on
+};
+const OpFn OP_TABLE(fpu_sse3_db_a32)[256] = {
+    // clang-format off
+        opFILDil_a32,  opFILDil_a32,  opFILDil_a32,  opFILDil_a32,  opFILDil_a32,  opFILDil_a32,  opFILDil_a32,  opFILDil_a32,
+        opFISTTPil_a32,  opFISTTPil_a32,  opFISTTPil_a32,  opFISTTPil_a32,  opFISTTPil_a32,  opFISTTPil_a32,  opFISTTPil_a32,  opFISTTPil_a32,
+        opFISTil_a32,  opFISTil_a32,  opFISTil_a32,  opFISTil_a32,  opFISTil_a32,  opFISTil_a32,  opFISTil_a32,  opFISTil_a32,
+        opFISTPil_a32, opFISTPil_a32, opFISTPil_a32, opFISTPil_a32, opFISTPil_a32, opFISTPil_a32, opFISTPil_a32, opFISTPil_a32,
+        ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,
+        opFLDe_a32,    opFLDe_a32,    opFLDe_a32,    opFLDe_a32,    opFLDe_a32,    opFLDe_a32,    opFLDe_a32,    opFLDe_a32,
+        ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,
+        opFSTPe_a32,   opFSTPe_a32,   opFSTPe_a32,   opFSTPe_a32,   opFSTPe_a32,   opFSTPe_a32,   opFSTPe_a32,   opFSTPe_a32,
+
+        opFILDil_a32,  opFILDil_a32,  opFILDil_a32,  opFILDil_a32,  opFILDil_a32,  opFILDil_a32,  opFILDil_a32,  opFILDil_a32,
+        opFISTTPil_a32,  opFISTTPil_a32,  opFISTTPil_a32,  opFISTTPil_a32,  opFISTTPil_a32,  opFISTTPil_a32,  opFISTTPil_a32,  opFISTTPil_a32,
+        opFISTil_a32,  opFISTil_a32,  opFISTil_a32,  opFISTil_a32,  opFISTil_a32,  opFISTil_a32,  opFISTil_a32,  opFISTil_a32,
+        opFISTPil_a32, opFISTPil_a32, opFISTPil_a32, opFISTPil_a32, opFISTPil_a32, opFISTPil_a32, opFISTPil_a32, opFISTPil_a32,
+        ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,
+        opFLDe_a32,    opFLDe_a32,    opFLDe_a32,    opFLDe_a32,    opFLDe_a32,    opFLDe_a32,    opFLDe_a32,    opFLDe_a32,
+        ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,
+        opFSTPe_a32,   opFSTPe_a32,   opFSTPe_a32,   opFSTPe_a32,   opFSTPe_a32,   opFSTPe_a32,   opFSTPe_a32,   opFSTPe_a32,
+
+        opFILDil_a32,  opFILDil_a32,  opFILDil_a32,  opFILDil_a32,  opFILDil_a32,  opFILDil_a32,  opFILDil_a32,  opFILDil_a32,
+        opFISTTPil_a32,  opFISTTPil_a32,  opFISTTPil_a32,  opFISTTPil_a32,  opFISTTPil_a32,  opFISTTPil_a32,  opFISTTPil_a32,  opFISTTPil_a32,
+        opFISTil_a32,  opFISTil_a32,  opFISTil_a32,  opFISTil_a32,  opFISTil_a32,  opFISTil_a32,  opFISTil_a32,  opFISTil_a32,
+        opFISTPil_a32, opFISTPil_a32, opFISTPil_a32, opFISTPil_a32, opFISTPil_a32, opFISTPil_a32, opFISTPil_a32, opFISTPil_a32,
+        ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,
+        opFLDe_a32,    opFLDe_a32,    opFLDe_a32,    opFLDe_a32,    opFLDe_a32,    opFLDe_a32,    opFLDe_a32,    opFLDe_a32,
+        ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,
+        opFSTPe_a32,   opFSTPe_a32,   opFSTPe_a32,   opFSTPe_a32,   opFSTPe_a32,   opFSTPe_a32,   opFSTPe_a32,   opFSTPe_a32,
+
+        opFCMOVNB,     opFCMOVNB,     opFCMOVNB,     opFCMOVNB,     opFCMOVNB,     opFCMOVNB,     opFCMOVNB,     opFCMOVNB,
+        opFCMOVNE,     opFCMOVNE,     opFCMOVNE,     opFCMOVNE,     opFCMOVNE,     opFCMOVNE,     opFCMOVNE,     opFCMOVNE,
+        opFCMOVNBE,    opFCMOVNBE,    opFCMOVNBE,    opFCMOVNBE,    opFCMOVNBE,    opFCMOVNBE,    opFCMOVNBE,    opFCMOVNBE,
+        opFCMOVNU,     opFCMOVNU,     opFCMOVNU,     opFCMOVNU,     opFCMOVNU,     opFCMOVNU,     opFCMOVNU,     opFCMOVNU,
+        opFNOP,        opFNOP,        opFCLEX,       opFINIT,       opFNOP,        opFNOP,        ILLEGAL_a32,       ILLEGAL_a32,
+        opFUCOMI,      opFUCOMI,      opFUCOMI,      opFUCOMI,      opFUCOMI,      opFUCOMI,      opFUCOMI,      opFUCOMI,
+        opFCOMI,       opFCOMI,       opFCOMI,       opFCOMI,       opFCOMI,       opFCOMI,       opFCOMI,       opFCOMI,
+        ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,
+    // clang-format on
+};
 #    endif
 
 #    ifndef OPS_286_386
@@ -3708,6 +4028,87 @@ const OpFn OP_TABLE(fpu_dd_a32)[256] = {
     // clang-format on
 };
 
+#ifndef OPS_286_386
+const OpFn OP_TABLE(fpu_sse3_dd_a16)[256] = {
+    // clang-format off
+        opFLDd_a16,    opFLDd_a16,    opFLDd_a16,    opFLDd_a16,    opFLDd_a16,    opFLDd_a16,    opFLDd_a16,    opFLDd_a16,
+        opFISTTPiq_a16,  opFISTTPiq_a16,  opFISTTPiq_a16,  opFISTTPiq_a16,  opFISTTPiq_a16,  opFISTTPiq_a16,  opFISTTPiq_a16,  opFISTTPiq_a16,
+        opFSTd_a16,    opFSTd_a16,    opFSTd_a16,    opFSTd_a16,    opFSTd_a16,    opFSTd_a16,    opFSTd_a16,    opFSTd_a16,
+        opFSTPd_a16,   opFSTPd_a16,   opFSTPd_a16,   opFSTPd_a16,   opFSTPd_a16,   opFSTPd_a16,   opFSTPd_a16,   opFSTPd_a16,
+        opFSTOR_a16,   opFSTOR_a16,   opFSTOR_a16,   opFSTOR_a16,   opFSTOR_a16,   opFSTOR_a16,   opFSTOR_a16,   opFSTOR_a16,
+        ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,
+        opFSAVE_a16,   opFSAVE_a16,   opFSAVE_a16,   opFSAVE_a16,   opFSAVE_a16,   opFSAVE_a16,   opFSAVE_a16,   opFSAVE_a16,
+        opFSTSW_a16,   opFSTSW_a16,   opFSTSW_a16,   opFSTSW_a16,   opFSTSW_a16,   opFSTSW_a16,   opFSTSW_a16,   opFSTSW_a16,
+
+        opFLDd_a16,    opFLDd_a16,    opFLDd_a16,    opFLDd_a16,    opFLDd_a16,    opFLDd_a16,    opFLDd_a16,    opFLDd_a16,
+        opFISTTPiq_a16,  opFISTTPiq_a16,  opFISTTPiq_a16,  opFISTTPiq_a16,  opFISTTPiq_a16,  opFISTTPiq_a16,  opFISTTPiq_a16,  opFISTTPiq_a16,
+        opFSTd_a16,    opFSTd_a16,    opFSTd_a16,    opFSTd_a16,    opFSTd_a16,    opFSTd_a16,    opFSTd_a16,    opFSTd_a16,
+        opFSTPd_a16,   opFSTPd_a16,   opFSTPd_a16,   opFSTPd_a16,   opFSTPd_a16,   opFSTPd_a16,   opFSTPd_a16,   opFSTPd_a16,
+        opFSTOR_a16,   opFSTOR_a16,   opFSTOR_a16,   opFSTOR_a16,   opFSTOR_a16,   opFSTOR_a16,   opFSTOR_a16,   opFSTOR_a16,
+        ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,
+        opFSAVE_a16,   opFSAVE_a16,   opFSAVE_a16,   opFSAVE_a16,   opFSAVE_a16,   opFSAVE_a16,   opFSAVE_a16,   opFSAVE_a16,
+        opFSTSW_a16,   opFSTSW_a16,   opFSTSW_a16,   opFSTSW_a16,   opFSTSW_a16,   opFSTSW_a16,   opFSTSW_a16,   opFSTSW_a16,
+
+        opFLDd_a16,    opFLDd_a16,    opFLDd_a16,    opFLDd_a16,    opFLDd_a16,    opFLDd_a16,    opFLDd_a16,    opFLDd_a16,
+        opFISTTPiq_a16,  opFISTTPiq_a16,  opFISTTPiq_a16,  opFISTTPiq_a16,  opFISTTPiq_a16,  opFISTTPiq_a16,  opFISTTPiq_a16,  opFISTTPiq_a16,
+        opFSTd_a16,    opFSTd_a16,    opFSTd_a16,    opFSTd_a16,    opFSTd_a16,    opFSTd_a16,    opFSTd_a16,    opFSTd_a16,
+        opFSTPd_a16,   opFSTPd_a16,   opFSTPd_a16,   opFSTPd_a16,   opFSTPd_a16,   opFSTPd_a16,   opFSTPd_a16,   opFSTPd_a16,
+        opFSTOR_a16,   opFSTOR_a16,   opFSTOR_a16,   opFSTOR_a16,   opFSTOR_a16,   opFSTOR_a16,   opFSTOR_a16,   opFSTOR_a16,
+        ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,
+        opFSAVE_a16,   opFSAVE_a16,   opFSAVE_a16,   opFSAVE_a16,   opFSAVE_a16,   opFSAVE_a16,   opFSAVE_a16,   opFSAVE_a16,
+        opFSTSW_a16,   opFSTSW_a16,   opFSTSW_a16,   opFSTSW_a16,   opFSTSW_a16,   opFSTSW_a16,   opFSTSW_a16,   opFSTSW_a16,
+
+        opFFREE,       opFFREE,       opFFREE,       opFFREE,       opFFREE,       opFFREE,       opFFREE,       opFFREE,
+        opFXCH,        opFXCH,        opFXCH,        opFXCH,        opFXCH,        opFXCH,        opFXCH,        opFXCH,
+        opFST,         opFST,         opFST,         opFST,         opFST,         opFST,         opFST,         opFST,
+        opFSTP,        opFSTP,        opFSTP,        opFSTP,        opFSTP,        opFSTP,        opFSTP,        opFSTP,
+        opFUCOM,       opFUCOM,       opFUCOM,       opFUCOM,       opFUCOM,       opFUCOM,       opFUCOM,       opFUCOM,
+        opFUCOMP,      opFUCOMP,      opFUCOMP,      opFUCOMP,      opFUCOMP,      opFUCOMP,      opFUCOMP,      opFUCOMP,
+        ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,
+        ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,
+    // clang-format on
+};
+
+const OpFn OP_TABLE(fpu_sse3_dd_a32)[256] = {
+    // clang-format off
+        opFLDd_a32,    opFLDd_a32,    opFLDd_a32,    opFLDd_a32,    opFLDd_a32,    opFLDd_a32,    opFLDd_a32,    opFLDd_a32,
+        opFISTTPiq_a32,  opFISTTPiq_a32,  opFISTTPiq_a32,  opFISTTPiq_a32,  opFISTTPiq_a32,  opFISTTPiq_a32,  opFISTTPiq_a32,  opFISTTPiq_a32,
+        opFSTd_a32,    opFSTd_a32,    opFSTd_a32,    opFSTd_a32,    opFSTd_a32,    opFSTd_a32,    opFSTd_a32,    opFSTd_a32,
+        opFSTPd_a32,   opFSTPd_a32,   opFSTPd_a32,   opFSTPd_a32,   opFSTPd_a32,   opFSTPd_a32,   opFSTPd_a32,   opFSTPd_a32,
+        opFSTOR_a32,   opFSTOR_a32,   opFSTOR_a32,   opFSTOR_a32,   opFSTOR_a32,   opFSTOR_a32,   opFSTOR_a32,   opFSTOR_a32,
+        ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,
+        opFSAVE_a32,   opFSAVE_a32,   opFSAVE_a32,   opFSAVE_a32,   opFSAVE_a32,   opFSAVE_a32,   opFSAVE_a32,   opFSAVE_a32,
+        opFSTSW_a32,   opFSTSW_a32,   opFSTSW_a32,   opFSTSW_a32,   opFSTSW_a32,   opFSTSW_a32,   opFSTSW_a32,   opFSTSW_a32,
+
+        opFLDd_a32,    opFLDd_a32,    opFLDd_a32,    opFLDd_a32,    opFLDd_a32,    opFLDd_a32,    opFLDd_a32,    opFLDd_a32,
+        opFISTTPiq_a32,  opFISTTPiq_a32,  opFISTTPiq_a32,  opFISTTPiq_a32,  opFISTTPiq_a32,  opFISTTPiq_a32,  opFISTTPiq_a32,  opFISTTPiq_a32,
+        opFSTd_a32,    opFSTd_a32,    opFSTd_a32,    opFSTd_a32,    opFSTd_a32,    opFSTd_a32,    opFSTd_a32,    opFSTd_a32,
+        opFSTPd_a32,   opFSTPd_a32,   opFSTPd_a32,   opFSTPd_a32,   opFSTPd_a32,   opFSTPd_a32,   opFSTPd_a32,   opFSTPd_a32,
+        opFSTOR_a32,   opFSTOR_a32,   opFSTOR_a32,   opFSTOR_a32,   opFSTOR_a32,   opFSTOR_a32,   opFSTOR_a32,   opFSTOR_a32,
+        ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,
+        opFSAVE_a32,   opFSAVE_a32,   opFSAVE_a32,   opFSAVE_a32,   opFSAVE_a32,   opFSAVE_a32,   opFSAVE_a32,   opFSAVE_a32,
+        opFSTSW_a32,   opFSTSW_a32,   opFSTSW_a32,   opFSTSW_a32,   opFSTSW_a32,   opFSTSW_a32,   opFSTSW_a32,   opFSTSW_a32,
+
+        opFLDd_a32,    opFLDd_a32,    opFLDd_a32,    opFLDd_a32,    opFLDd_a32,    opFLDd_a32,    opFLDd_a32,    opFLDd_a32,
+        opFISTTPiq_a32,  opFISTTPiq_a32,  opFISTTPiq_a32,  opFISTTPiq_a32,  opFISTTPiq_a32,  opFISTTPiq_a32,  opFISTTPiq_a32,  opFISTTPiq_a32,
+        opFSTd_a32,    opFSTd_a32,    opFSTd_a32,    opFSTd_a32,    opFSTd_a32,    opFSTd_a32,    opFSTd_a32,    opFSTd_a32,
+        opFSTPd_a32,   opFSTPd_a32,   opFSTPd_a32,   opFSTPd_a32,   opFSTPd_a32,   opFSTPd_a32,   opFSTPd_a32,   opFSTPd_a32,
+        opFSTOR_a32,   opFSTOR_a32,   opFSTOR_a32,   opFSTOR_a32,   opFSTOR_a32,   opFSTOR_a32,   opFSTOR_a32,   opFSTOR_a32,
+        ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,
+        opFSAVE_a32,   opFSAVE_a32,   opFSAVE_a32,   opFSAVE_a32,   opFSAVE_a32,   opFSAVE_a32,   opFSAVE_a32,   opFSAVE_a32,
+        opFSTSW_a32,   opFSTSW_a32,   opFSTSW_a32,   opFSTSW_a32,   opFSTSW_a32,   opFSTSW_a32,   opFSTSW_a32,   opFSTSW_a32,
+
+        opFFREE,       opFFREE,       opFFREE,       opFFREE,       opFFREE,       opFFREE,       opFFREE,       opFFREE,
+        opFXCH,        opFXCH,        opFXCH,        opFXCH,        opFXCH,        opFXCH,        opFXCH,        opFXCH,
+        opFST,         opFST,         opFST,         opFST,         opFST,         opFST,         opFST,         opFST,
+        opFSTP,        opFSTP,        opFSTP,        opFSTP,        opFSTP,        opFSTP,        opFSTP,        opFSTP,
+        opFUCOM,       opFUCOM,       opFUCOM,       opFUCOM,       opFUCOM,       opFUCOM,       opFUCOM,       opFUCOM,
+        opFUCOMP,      opFUCOMP,      opFUCOMP,      opFUCOMP,      opFUCOMP,      opFUCOMP,      opFUCOMP,      opFUCOMP,
+        ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,
+        ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,
+    // clang-format on
+};
+
 const OpFn OP_TABLE(fpu_cyrix_dd_a16)[256] = {
     // clang-format off
         opFLDd_a16,    opFLDd_a16,    opFLDd_a16,    opFLDd_a16,    opFLDd_a16,    opFLDd_a16,    opFLDd_a16,    opFLDd_a16,
@@ -3744,9 +4145,10 @@ const OpFn OP_TABLE(fpu_cyrix_dd_a16)[256] = {
         opFUCOM,       opFUCOM,       opFUCOM,       opFUCOM,       opFUCOM,       opFUCOM,       opFUCOM,       opFUCOM,
         opFUCOMP,      opFUCOMP,      opFUCOMP,      opFUCOMP,      opFUCOMP,      opFUCOMP,      opFUCOMP,      opFUCOMP,
         ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,
-        ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,    opFRICHOP,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,
+        ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,
     // clang-format on
 };
+        
 
 const OpFn OP_TABLE(fpu_cyrix_dd_a32)[256] = {
     // clang-format off
@@ -3787,6 +4189,7 @@ const OpFn OP_TABLE(fpu_cyrix_dd_a32)[256] = {
         ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,    opFRICHOP,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,
     // clang-format on
 };
+#endif
 
 const OpFn OP_TABLE(fpu_287_de_a16)[256] = {
     // clang-format off
@@ -4171,6 +4574,86 @@ const OpFn OP_TABLE(fpu_686_df_a32)[256] = {
 
         opFILDiw_a32,  opFILDiw_a32,  opFILDiw_a32,  opFILDiw_a32,  opFILDiw_a32,  opFILDiw_a32,  opFILDiw_a32,  opFILDiw_a32,
         ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,
+        opFISTiw_a32,  opFISTiw_a32,  opFISTiw_a32,  opFISTiw_a32,  opFISTiw_a32,  opFISTiw_a32,  opFISTiw_a32,  opFISTiw_a32,
+        opFISTPiw_a32, opFISTPiw_a32, opFISTPiw_a32, opFISTPiw_a32, opFISTPiw_a32, opFISTPiw_a32, opFISTPiw_a32, opFISTPiw_a32,
+        FBLD_a32,     FBLD_a32,     FBLD_a32,     FBLD_a32,     FBLD_a32,     FBLD_a32,     FBLD_a32,     FBLD_a32,
+        opFILDiq_a32,  opFILDiq_a32,  opFILDiq_a32,  opFILDiq_a32,  opFILDiq_a32,  opFILDiq_a32,  opFILDiq_a32,  opFILDiq_a32,
+        FBSTP_a32,     FBSTP_a32,     FBSTP_a32,     FBSTP_a32,     FBSTP_a32,     FBSTP_a32,     FBSTP_a32,     FBSTP_a32,
+        FISTPiq_a32,   FISTPiq_a32,   FISTPiq_a32,   FISTPiq_a32,   FISTPiq_a32,   FISTPiq_a32,   FISTPiq_a32,   FISTPiq_a32,
+
+        opFFREEP,      opFFREEP,      opFFREEP,      opFFREEP,      opFFREEP,      opFFREEP,      opFFREEP,      opFFREEP,
+        opFXCH,        opFXCH,        opFXCH,        opFXCH,        opFXCH,        opFXCH,        opFXCH,        opFXCH,
+        opFSTP,        opFSTP,        opFSTP,        opFSTP,        opFSTP,        opFSTP,        opFSTP,        opFSTP,
+        opFSTP,        opFSTP,        opFSTP,        opFSTP,        opFSTP,        opFSTP,        opFSTP,        opFSTP,
+        opFSTSW_AX,   ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,
+        opFUCOMIP,     opFUCOMIP,     opFUCOMIP,     opFUCOMIP,     opFUCOMIP,     opFUCOMIP,     opFUCOMIP,     opFUCOMIP,
+        opFCOMIP,      opFCOMIP,      opFCOMIP,      opFCOMIP,      opFCOMIP,      opFCOMIP,      opFCOMIP,      opFCOMIP,
+        ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,  ILLEGAL_a32,
+    // clang-format on
+};
+
+const OpFn OP_TABLE(fpu_sse3_df_a16)[256] = {
+    // clang-format off
+        opFILDiw_a16,  opFILDiw_a16,  opFILDiw_a16,  opFILDiw_a16,  opFILDiw_a16,  opFILDiw_a16,  opFILDiw_a16,  opFILDiw_a16,
+        opFISTTPiw_a16,  opFISTTPiw_a16,  opFISTTPiw_a16,  opFISTTPiw_a16,  opFISTTPiw_a16,  opFISTTPiw_a16,  opFISTTPiw_a16,  opFISTTPiw_a16,
+        opFISTiw_a16,  opFISTiw_a16,  opFISTiw_a16,  opFISTiw_a16,  opFISTiw_a16,  opFISTiw_a16,  opFISTiw_a16,  opFISTiw_a16,
+        opFISTPiw_a16, opFISTPiw_a16, opFISTPiw_a16, opFISTPiw_a16, opFISTPiw_a16, opFISTPiw_a16, opFISTPiw_a16, opFISTPiw_a16,
+        FBLD_a16,     FBLD_a16,     FBLD_a16,     FBLD_a16,     FBLD_a16,     FBLD_a16,     FBLD_a16,     FBLD_a16,
+        opFILDiq_a16,  opFILDiq_a16,  opFILDiq_a16,  opFILDiq_a16,  opFILDiq_a16,  opFILDiq_a16,  opFILDiq_a16,  opFILDiq_a16,
+        FBSTP_a16,     FBSTP_a16,     FBSTP_a16,     FBSTP_a16,     FBSTP_a16,     FBSTP_a16,     FBSTP_a16,     FBSTP_a16,
+        FISTPiq_a16,   FISTPiq_a16,   FISTPiq_a16,   FISTPiq_a16,   FISTPiq_a16,   FISTPiq_a16,   FISTPiq_a16,   FISTPiq_a16,
+
+        opFILDiw_a16,  opFILDiw_a16,  opFILDiw_a16,  opFILDiw_a16,  opFILDiw_a16,  opFILDiw_a16,  opFILDiw_a16,  opFILDiw_a16,
+        opFISTTPiw_a16,  opFISTTPiw_a16,  opFISTTPiw_a16,  opFISTTPiw_a16,  opFISTTPiw_a16,  opFISTTPiw_a16,  opFISTTPiw_a16,  opFISTTPiw_a16,
+        opFISTiw_a16,  opFISTiw_a16,  opFISTiw_a16,  opFISTiw_a16,  opFISTiw_a16,  opFISTiw_a16,  opFISTiw_a16,  opFISTiw_a16,
+        opFISTPiw_a16, opFISTPiw_a16, opFISTPiw_a16, opFISTPiw_a16, opFISTPiw_a16, opFISTPiw_a16, opFISTPiw_a16, opFISTPiw_a16,
+        FBLD_a16,     FBLD_a16,     FBLD_a16,     FBLD_a16,     FBLD_a16,     FBLD_a16,     FBLD_a16,     FBLD_a16,
+        opFILDiq_a16,  opFILDiq_a16,  opFILDiq_a16,  opFILDiq_a16,  opFILDiq_a16,  opFILDiq_a16,  opFILDiq_a16,  opFILDiq_a16,
+        FBSTP_a16,     FBSTP_a16,     FBSTP_a16,     FBSTP_a16,     FBSTP_a16,     FBSTP_a16,     FBSTP_a16,     FBSTP_a16,
+        FISTPiq_a16,   FISTPiq_a16,   FISTPiq_a16,   FISTPiq_a16,   FISTPiq_a16,   FISTPiq_a16,   FISTPiq_a16,   FISTPiq_a16,
+
+        opFILDiw_a16,  opFILDiw_a16,  opFILDiw_a16,  opFILDiw_a16,  opFILDiw_a16,  opFILDiw_a16,  opFILDiw_a16,  opFILDiw_a16,
+        opFISTTPiw_a16,  opFISTTPiw_a16,  opFISTTPiw_a16,  opFISTTPiw_a16,  opFISTTPiw_a16,  opFISTTPiw_a16,  opFISTTPiw_a16,  opFISTTPiw_a16,
+        opFISTiw_a16,  opFISTiw_a16,  opFISTiw_a16,  opFISTiw_a16,  opFISTiw_a16,  opFISTiw_a16,  opFISTiw_a16,  opFISTiw_a16,
+        opFISTPiw_a16, opFISTPiw_a16, opFISTPiw_a16, opFISTPiw_a16, opFISTPiw_a16, opFISTPiw_a16, opFISTPiw_a16, opFISTPiw_a16,
+        FBLD_a16,     FBLD_a16,     FBLD_a16,     FBLD_a16,     FBLD_a16,     FBLD_a16,     FBLD_a16,     FBLD_a16,
+        opFILDiq_a16,  opFILDiq_a16,  opFILDiq_a16,  opFILDiq_a16,  opFILDiq_a16,  opFILDiq_a16,  opFILDiq_a16,  opFILDiq_a16,
+        FBSTP_a16,     FBSTP_a16,     FBSTP_a16,     FBSTP_a16,     FBSTP_a16,     FBSTP_a16,     FBSTP_a16,     FBSTP_a16,
+        FISTPiq_a16,   FISTPiq_a16,   FISTPiq_a16,   FISTPiq_a16,   FISTPiq_a16,   FISTPiq_a16,   FISTPiq_a16,   FISTPiq_a16,
+
+        opFFREEP,      opFFREEP,      opFFREEP,      opFFREEP,      opFFREEP,      opFFREEP,      opFFREEP,      opFFREEP,
+        opFXCH,        opFXCH,        opFXCH,        opFXCH,        opFXCH,        opFXCH,        opFXCH,        opFXCH,
+        opFSTP,        opFSTP,        opFSTP,        opFSTP,        opFSTP,        opFSTP,        opFSTP,        opFSTP,
+        opFSTP,        opFSTP,        opFSTP,        opFSTP,        opFSTP,        opFSTP,        opFSTP,        opFSTP,
+        opFSTSW_AX,   ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,
+        opFUCOMIP,     opFUCOMIP,     opFUCOMIP,     opFUCOMIP,     opFUCOMIP,     opFUCOMIP,     opFUCOMIP,     opFUCOMIP,
+        opFCOMIP,      opFCOMIP,      opFCOMIP,      opFCOMIP,      opFCOMIP,      opFCOMIP,      opFCOMIP,      opFCOMIP,
+        ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,  ILLEGAL_a16,
+    // clang-format on
+};
+
+const OpFn OP_TABLE(fpu_sse3_df_a32)[256] = {
+    // clang-format off
+        opFILDiw_a32,  opFILDiw_a32,  opFILDiw_a32,  opFILDiw_a32,  opFILDiw_a32,  opFILDiw_a32,  opFILDiw_a32,  opFILDiw_a32,
+        opFISTTPiw_a32,  opFISTTPiw_a32,  opFISTTPiw_a32,  opFISTTPiw_a32,  opFISTTPiw_a32,  opFISTTPiw_a32,  opFISTTPiw_a32,  opFISTTPiw_a32,
+        opFISTiw_a32,  opFISTiw_a32,  opFISTiw_a32,  opFISTiw_a32,  opFISTiw_a32,  opFISTiw_a32,  opFISTiw_a32,  opFISTiw_a32,
+        opFISTPiw_a32, opFISTPiw_a32, opFISTPiw_a32, opFISTPiw_a32, opFISTPiw_a32, opFISTPiw_a32, opFISTPiw_a32, opFISTPiw_a32,
+        FBLD_a32,     FBLD_a32,     FBLD_a32,     FBLD_a32,     FBLD_a32,     FBLD_a32,     FBLD_a32,     FBLD_a32,
+        opFILDiq_a32,  opFILDiq_a32,  opFILDiq_a32,  opFILDiq_a32,  opFILDiq_a32,  opFILDiq_a32,  opFILDiq_a32,  opFILDiq_a32,
+        FBSTP_a32,     FBSTP_a32,     FBSTP_a32,     FBSTP_a32,     FBSTP_a32,     FBSTP_a32,     FBSTP_a32,     FBSTP_a32,
+        FISTPiq_a32,   FISTPiq_a32,   FISTPiq_a32,   FISTPiq_a32,   FISTPiq_a32,   FISTPiq_a32,   FISTPiq_a32,   FISTPiq_a32,
+
+        opFILDiw_a32,  opFILDiw_a32,  opFILDiw_a32,  opFILDiw_a32,  opFILDiw_a32,  opFILDiw_a32,  opFILDiw_a32,  opFILDiw_a32,
+        opFISTTPiw_a32,  opFISTTPiw_a32,  opFISTTPiw_a32,  opFISTTPiw_a32,  opFISTTPiw_a32,  opFISTTPiw_a32,  opFISTTPiw_a32,  opFISTTPiw_a32,
+        opFISTiw_a32,  opFISTiw_a32,  opFISTiw_a32,  opFISTiw_a32,  opFISTiw_a32,  opFISTiw_a32,  opFISTiw_a32,  opFISTiw_a32,
+        opFISTPiw_a32, opFISTPiw_a32, opFISTPiw_a32, opFISTPiw_a32, opFISTPiw_a32, opFISTPiw_a32, opFISTPiw_a32, opFISTPiw_a32,
+        FBLD_a32,     FBLD_a32,     FBLD_a32,     FBLD_a32,     FBLD_a32,     FBLD_a32,     FBLD_a32,     FBLD_a32,
+        opFILDiq_a32,  opFILDiq_a32,  opFILDiq_a32,  opFILDiq_a32,  opFILDiq_a32,  opFILDiq_a32,  opFILDiq_a32,  opFILDiq_a32,
+        FBSTP_a32,     FBSTP_a32,     FBSTP_a32,     FBSTP_a32,     FBSTP_a32,     FBSTP_a32,     FBSTP_a32,     FBSTP_a32,
+        FISTPiq_a32,   FISTPiq_a32,   FISTPiq_a32,   FISTPiq_a32,   FISTPiq_a32,   FISTPiq_a32,   FISTPiq_a32,   FISTPiq_a32,
+
+        opFILDiw_a32,  opFILDiw_a32,  opFILDiw_a32,  opFILDiw_a32,  opFILDiw_a32,  opFILDiw_a32,  opFILDiw_a32,  opFILDiw_a32,
+        opFISTTPiw_a32,  opFISTTPiw_a32,  opFISTTPiw_a32,  opFISTTPiw_a32,  opFISTTPiw_a32,  opFISTTPiw_a32,  opFISTTPiw_a32,  opFISTTPiw_a32,
         opFISTiw_a32,  opFISTiw_a32,  opFISTiw_a32,  opFISTiw_a32,  opFISTiw_a32,  opFISTiw_a32,  opFISTiw_a32,  opFISTiw_a32,
         opFISTPiw_a32, opFISTPiw_a32, opFISTPiw_a32, opFISTPiw_a32, opFISTPiw_a32, opFISTPiw_a32, opFISTPiw_a32, opFISTPiw_a32,
         FBLD_a32,     FBLD_a32,     FBLD_a32,     FBLD_a32,     FBLD_a32,     FBLD_a32,     FBLD_a32,     FBLD_a32,

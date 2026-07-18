@@ -38,7 +38,9 @@
 #include "x86seg_common.h"
 #include <86box/mem.h>
 #include <86box/nmi.h>
+#include <86box/timer.h>
 #include <86box/pic.h>
+#include <86box/apic.h>
 #include <86box/pci.h>
 #include <86box/smram.h>
 #include <86box/timer.h>
@@ -61,7 +63,7 @@ enum {
     CPUID_PAE       = (1 << 6),  /* Physical Address Extension */
     CPUID_MCE       = (1 << 7),  /* Machine Check Exception */
     CPUID_CMPXCHG8B = (1 << 8),  /* CMPXCHG8B instruction */
-    CPUID_APIC      = (1 << 9),  /* On-chip APIC */
+    CPUID_LAPIC      = (1 << 9),  /* On-chip APIC */
     CPUID_AMDPGE    = (1 << 9),  /* Global Page Enable (AMD K5 Model 0 only) */
     CPUID_AMDSEP    = (1 << 10), /* SYSCALL and SYSRET instructions (AMD K6 only) */
     CPUID_SEP       = (1 << 11), /* SYSENTER and SYSEXIT instructions (SYSCALL and SYSRET if EAX=80000001h) */
@@ -71,8 +73,18 @@ enum {
     CPUID_CMOV      = (1 << 15), /* Conditional move instructions */
     CPUID_PAT       = (1 << 16), /* Page Attribute Table */
     CPUID_PSE36     = (1 << 17), /* 36-bit Page Size Extension */
+    CPUID_PSN       = (1 << 18), /* Processor Serial Number */
+    CPUID_CLFLUSH   = (1 << 19), /* CLFLUSH instruction */
     CPUID_MMX       = (1 << 23), /* MMX technology */
-    CPUID_FXSR      = (1 << 24)  /* FXSAVE and FXRSTOR instructions */
+    CPUID_FXSR      = (1 << 24), /* FXSAVE and FXRSTOR instructions */
+    CPUID_SSE       = (1 << 25),
+    CPUID_SSE2      = (1 << 26),
+
+    CPUID_SSE3      = (1 << 0),
+    CPUID_MONITOR_MWAIT = (1 << 3),
+    CPUID_SSSE3     = (1 << 9),
+
+    CPUID_NX        = (1 << 20)  /* NX bit */
 };
 
 /* Additional flags returned by CPUID function 0x80000001 */
@@ -95,6 +107,8 @@ uint32_t abrt_error;
 #ifdef USE_DYNAREC
 const OpFn *x86_dynarec_opcodes;
 const OpFn *x86_dynarec_opcodes_0f;
+const OpFn *x86_dynarec_opcodes_0f_38;
+const OpFn *x86_dynarec_opcodes_0f_3a;
 const OpFn *x86_dynarec_opcodes_d8_a16;
 const OpFn *x86_dynarec_opcodes_d8_a32;
 const OpFn *x86_dynarec_opcodes_d9_a16;
@@ -112,12 +126,16 @@ const OpFn *x86_dynarec_opcodes_de_a32;
 const OpFn *x86_dynarec_opcodes_df_a16;
 const OpFn *x86_dynarec_opcodes_df_a32;
 const OpFn *x86_dynarec_opcodes_REPE;
+const OpFn *x86_dynarec_opcodes_REPE_0f;
 const OpFn *x86_dynarec_opcodes_REPNE;
+const OpFn *x86_dynarec_opcodes_REPNE_0f;
 const OpFn *x86_dynarec_opcodes_3DNOW;
 #endif /* USE_DYNAREC */
 
 const OpFn *x86_opcodes;
 const OpFn *x86_opcodes_0f;
+const OpFn *x86_opcodes_0f_38;
+const OpFn *x86_opcodes_0f_3a;
 const OpFn *x86_opcodes_d8_a16;
 const OpFn *x86_opcodes_d8_a32;
 const OpFn *x86_opcodes_d9_a16;
@@ -135,7 +153,9 @@ const OpFn *x86_opcodes_de_a32;
 const OpFn *x86_opcodes_df_a16;
 const OpFn *x86_opcodes_df_a32;
 const OpFn *x86_opcodes_REPE;
+const OpFn *x86_opcodes_REPE_0f;
 const OpFn *x86_opcodes_REPNE;
+const OpFn *x86_opcodes_REPNE_0f;
 const OpFn *x86_opcodes_3DNOW;
 
 const OpFn *x86_2386_opcodes;
@@ -215,7 +235,9 @@ int is_am486dxl;
 int is_pentium;
 int is_k5;
 int is_k6;
+int is_athlon;
 int is_p6;
+int is_pentium3;
 int is_cxsmm;
 int is_cx6x86;
 int hasfpu;
@@ -250,7 +272,7 @@ int timing_jmp_pm;
 int timing_jmp_pm_gate;
 int timing_misaligned;
 
-uint32_t cpu_features;
+uint64_t cpu_features;
 uint32_t cpu_fast_off_flags;
 
 uint32_t _tr[8]      = { 0, 0, 0, 0, 0, 0, 0, 0 };
@@ -262,6 +284,9 @@ uint64_t tsc = 0;
 
 double cpu_dmulti;
 double cpu_busspeed;
+
+smram_t *amd_k7_smram_aseg;
+smram_t *amd_k7_smram_tseg;
 
 msr_t msr;
 
@@ -285,6 +310,11 @@ uint8_t ccr6;
 uint8_t ccr7;
 uint8_t cxpmr;
 
+void
+cpu_INVD(uint8_t wb)
+{
+    mem_invalidate_mtrr(wb);
+}
 uint8_t reg_30 = 0x00;
 uint8_t arr[24] = { 0 };
 uint8_t rcr[8] = { 0 };
@@ -551,8 +581,10 @@ cpu_set(void)
     is_pentium = (cpu_isintel && (cpu_s->cpu_type >= CPU_i486SX_SLENH) && (cpu_s->cpu_type < CPU_PENTIUMPRO)) || !strcmp(cpu_f->manufacturer, "IDT") || (cpu_s->cpu_type == CPU_Am486DXL);
     is_k5      = !strcmp(cpu_f->manufacturer, "AMD") && (cpu_s->cpu_type > CPU_ENH_Am486DX) && (cpu_s->cpu_type < CPU_K6);
     is_k6      = (cpu_s->cpu_type >= CPU_K6) && !strcmp(cpu_f->manufacturer, "AMD");
+    is_athlon  = (cpu_s->cpu_type >= CPU_ATHLON) && !strcmp(cpu_f->manufacturer, "AMD");
     /* The Samuel 2 datasheet claims it's Celeron-compatible. */
     is_p6     = (cpu_isintel && (cpu_s->cpu_type >= CPU_PENTIUMPRO)) || !strcmp(cpu_f->manufacturer, "VIA");
+    is_pentium3 = cpu_isintel && (cpu_s->cpu_type >= CPU_PENTIUM3);
     is_cxsmm  = (!strcmp(cpu_f->manufacturer, "Cyrix") || !strcmp(cpu_f->manufacturer, "ST")) && (cpu_s->cpu_type >= CPU_Cx486S);
     is_cx6x86 = (cpu_s->cpu_type >= CPU_Cx6x86) && (cpu_s->cpu_type <= CPU_Cx6x86L);
 
@@ -600,13 +632,21 @@ cpu_set(void)
 #endif /* USE_DYNAREC */
     x86_setopcodes_2386(ops_2386_386, ops_2386_386_0f);
     x86_opcodes_REPE       = ops_REPE;
+    x86_opcodes_REPE_0f    = NULL;
     x86_opcodes_REPNE      = ops_REPNE;
+    x86_opcodes_REPNE_0f   = NULL;
+    x86_opcodes_0f_38      = NULL;
+    x86_opcodes_0f_3a      = NULL;
     x86_2386_opcodes_REPE  = ops_2386_REPE;
     x86_2386_opcodes_REPNE = ops_2386_REPNE;
     x86_opcodes_3DNOW      = ops_3DNOW;
 #ifdef USE_DYNAREC
     x86_dynarec_opcodes_REPE  = dynarec_ops_REPE;
+    x86_dynarec_opcodes_REPE_0f  = NULL;
     x86_dynarec_opcodes_REPNE = dynarec_ops_REPNE;
+    x86_dynarec_opcodes_REPNE_0f  = NULL;
+    x86_dynarec_opcodes_0f_38 = NULL;
+    x86_dynarec_opcodes_0f_3a = NULL;
     x86_dynarec_opcodes_3DNOW = dynarec_ops_3DNOW;
 #endif /* USE_DYNAREC */
 
@@ -1764,7 +1804,7 @@ cpu_set(void)
 
             timing_misaligned = 3;
 
-            cpu_features = CPU_FEATURE_RDTSC | CPU_FEATURE_MSR | CPU_FEATURE_CR4 | CPU_FEATURE_VME;
+            cpu_features = CPU_FEATURE_RDTSC | CPU_FEATURE_MSR | CPU_FEATURE_CR4 | CPU_FEATURE_VME | CPU_FEATURE_PSE36 | CPU_FEATURE_LAPIC;
             if (cpu_s->cpu_type >= CPU_PENTIUM2)
                 cpu_features |= CPU_FEATURE_MMX;
             cpu_CR4_mask = CR4_VME | CR4_PVI | CR4_TSD | CR4_DE | CR4_PSE | CR4_MCE | CR4_PAE | CR4_PCE | CR4_PGE;
@@ -1776,6 +1816,329 @@ cpu_set(void)
 #ifdef USE_DYNAREC
             codegen_timing_set(&codegen_timing_p6);
 #endif /* USE_DYNAREC */
+            break;
+
+        case CPU_PENTIUM3:
+#ifdef USE_DYNAREC
+            x86_setopcodes(ops_386, ops_pentium3_0f, dynarec_ops_386, dynarec_ops_pentium3_0f);
+            if (fpu_softfloat) {
+                x86_dynarec_opcodes_da_a16 = dynarec_ops_sf_fpu_686_da_a16;
+                x86_dynarec_opcodes_da_a32 = dynarec_ops_sf_fpu_686_da_a32;
+                x86_dynarec_opcodes_db_a16 = dynarec_ops_sf_fpu_686_db_a16;
+                x86_dynarec_opcodes_db_a32 = dynarec_ops_sf_fpu_686_db_a32;
+                x86_dynarec_opcodes_df_a16 = dynarec_ops_sf_fpu_686_df_a16;
+                x86_dynarec_opcodes_df_a32 = dynarec_ops_sf_fpu_686_df_a32;
+            } else {
+                x86_dynarec_opcodes_da_a16 = dynarec_ops_fpu_686_da_a16;
+                x86_dynarec_opcodes_da_a32 = dynarec_ops_fpu_686_da_a32;
+                x86_dynarec_opcodes_db_a16 = dynarec_ops_fpu_686_db_a16;
+                x86_dynarec_opcodes_db_a32 = dynarec_ops_fpu_686_db_a32;
+                x86_dynarec_opcodes_df_a16 = dynarec_ops_fpu_686_df_a16;
+                x86_dynarec_opcodes_df_a32 = dynarec_ops_fpu_686_df_a32;
+            }
+            x86_dynarec_opcodes_REPE_0f = dynarec_ops_pentium3_REPE_0f;
+#else
+            x86_setopcodes(ops_386, ops_pentium3_0f);
+#endif
+            x86_opcodes_REPE_0f = ops_pentium3_REPE_0f;
+            if (fpu_softfloat) {
+                x86_opcodes_da_a16 = ops_sf_fpu_686_da_a16;
+                x86_opcodes_da_a32 = ops_sf_fpu_686_da_a32;
+                x86_opcodes_db_a16 = ops_sf_fpu_686_db_a16;
+                x86_opcodes_db_a32 = ops_sf_fpu_686_db_a32;
+                x86_opcodes_df_a16 = ops_sf_fpu_686_df_a16;
+                x86_opcodes_df_a32 = ops_sf_fpu_686_df_a32;
+            } else {
+                x86_opcodes_da_a16 = ops_fpu_686_da_a16;
+                x86_opcodes_da_a32 = ops_fpu_686_da_a32;
+                x86_opcodes_db_a16 = ops_fpu_686_db_a16;
+                x86_opcodes_db_a32 = ops_fpu_686_db_a32;
+                x86_opcodes_df_a16 = ops_fpu_686_df_a16;
+                x86_opcodes_df_a32 = ops_fpu_686_df_a32;
+            }
+
+            timing_rr  = 1; /* register dest - register src */
+            timing_rm  = 2; /* register dest - memory src */
+            timing_mr  = 3; /* memory dest   - register src */
+            timing_mm  = 3;
+            timing_rml = 2; /* register dest - memory src long */
+            timing_mrl = 3; /* memory dest   - register src long */
+            timing_mml = 3;
+            timing_bt  = 0; /* branch taken */
+            timing_bnt = 1; /* branch not taken */
+
+            timing_int                = 6;
+            timing_int_rm             = 11;
+            timing_int_v86            = 54;
+            timing_int_pm             = 25;
+            timing_int_pm_outer       = 42;
+            timing_iret_rm            = 7;
+            timing_iret_v86           = 27; /* unknown */
+            timing_iret_pm            = 10;
+            timing_iret_pm_outer      = 27;
+            timing_call_rm            = 4;
+            timing_call_pm            = 4;
+            timing_call_pm_gate       = 22;
+            timing_call_pm_gate_inner = 44;
+            timing_retf_rm            = 4;
+            timing_retf_pm            = 4;
+            timing_retf_pm_outer      = 23;
+            timing_jmp_rm             = 3;
+            timing_jmp_pm             = 3;
+            timing_jmp_pm_gate        = 18;
+
+            timing_misaligned = 3;
+
+            cpu_features = CPU_FEATURE_RDTSC | CPU_FEATURE_MSR | CPU_FEATURE_CR4 | CPU_FEATURE_VME | CPU_FEATURE_MMX | CPU_FEATURE_PSE36 | CPU_FEATURE_SSE | CPU_FEATURE_LAPIC;
+            msr.fcr      = (1 << 8) | (1 << 9) | (1 << 12) | (1 << 16) | (1 << 19) | (1 << 21);
+            cpu_CR4_mask = CR4_VME | CR4_PVI | CR4_TSD | CR4_DE | CR4_PSE | CR4_MCE | CR4_PAE | CR4_PCE | CR4_PGE;
+            cpu_CR4_mask |= CR4_OSFXSR | CR4_OSXMMEXCPT;
+
+#ifdef USE_DYNAREC
+            codegen_timing_set(&codegen_timing_p6);
+#endif
+            break;
+
+        case CPU_PENTIUM4W:
+#ifdef USE_DYNAREC
+            x86_setopcodes(ops_386, ops_genericintel_0f, dynarec_ops_386, dynarec_ops_genericintel_0f);
+            if (fpu_softfloat) {
+                x86_dynarec_opcodes_da_a16 = dynarec_ops_sf_fpu_686_da_a16;
+                x86_dynarec_opcodes_da_a32 = dynarec_ops_sf_fpu_686_da_a32;
+                x86_dynarec_opcodes_db_a16 = dynarec_ops_sf_fpu_686_db_a16;
+                x86_dynarec_opcodes_db_a32 = dynarec_ops_sf_fpu_686_db_a32;
+                x86_dynarec_opcodes_df_a16 = dynarec_ops_sf_fpu_686_df_a16;
+                x86_dynarec_opcodes_df_a32 = dynarec_ops_sf_fpu_686_df_a32;
+            } else {
+                x86_dynarec_opcodes_da_a16 = dynarec_ops_fpu_686_da_a16;
+                x86_dynarec_opcodes_da_a32 = dynarec_ops_fpu_686_da_a32;
+                x86_dynarec_opcodes_db_a16 = dynarec_ops_fpu_686_db_a16;
+                x86_dynarec_opcodes_db_a32 = dynarec_ops_fpu_686_db_a32;
+                x86_dynarec_opcodes_df_a16 = dynarec_ops_fpu_686_df_a16;
+                x86_dynarec_opcodes_df_a32 = dynarec_ops_fpu_686_df_a32;
+            }
+            x86_dynarec_opcodes_REPE_0f = dynarec_ops_pentium4w_REPE_0f;
+            x86_dynarec_opcodes_REPNE_0f = dynarec_ops_pentium4w_REPNE_0f;
+#else
+            x86_setopcodes(ops_386, ops_pentium4w_0f);
+#endif
+            x86_opcodes_REPE_0f = ops_pentium4w_REPE_0f;
+            x86_opcodes_REPNE_0f = ops_pentium4w_REPNE_0f;
+            if (fpu_softfloat) {
+                x86_opcodes_da_a16 = ops_sf_fpu_686_da_a16;
+                x86_opcodes_da_a32 = ops_sf_fpu_686_da_a32;
+                x86_opcodes_db_a16 = ops_sf_fpu_686_db_a16;
+                x86_opcodes_db_a32 = ops_sf_fpu_686_db_a32;
+                x86_opcodes_df_a16 = ops_sf_fpu_686_df_a16;
+                x86_opcodes_df_a32 = ops_sf_fpu_686_df_a32;
+            } else {
+                x86_opcodes_da_a16 = ops_fpu_686_da_a16;
+                x86_opcodes_da_a32 = ops_fpu_686_da_a32;
+                x86_opcodes_db_a16 = ops_fpu_686_db_a16;
+                x86_opcodes_db_a32 = ops_fpu_686_db_a32;
+                x86_opcodes_df_a16 = ops_fpu_686_df_a16;
+                x86_opcodes_df_a32 = ops_fpu_686_df_a32;
+            }
+
+            timing_rr  = 1; /* register dest - register src */
+            timing_rm  = 2; /* register dest - memory src */
+            timing_mr  = 3; /* memory dest   - register src */
+            timing_mm  = 3;
+            timing_rml = 2; /* register dest - memory src long */
+            timing_mrl = 3; /* memory dest   - register src long */
+            timing_mml = 3;
+            timing_bt  = 0; /* branch taken */
+            timing_bnt = 1; /* branch not taken */
+
+            timing_int                = 6;
+            timing_int_rm             = 11;
+            timing_int_v86            = 54;
+            timing_int_pm             = 25;
+            timing_int_pm_outer       = 42;
+            timing_iret_rm            = 7;
+            timing_iret_v86           = 27; /* unknown */
+            timing_iret_pm            = 10;
+            timing_iret_pm_outer      = 27;
+            timing_call_rm            = 4;
+            timing_call_pm            = 4;
+            timing_call_pm_gate       = 22;
+            timing_call_pm_gate_inner = 44;
+            timing_retf_rm            = 4;
+            timing_retf_pm            = 4;
+            timing_retf_pm_outer      = 23;
+            timing_jmp_rm             = 3;
+            timing_jmp_pm             = 3;
+            timing_jmp_pm_gate        = 18;
+
+            timing_misaligned = 3;
+
+            cpu_features = CPU_FEATURE_RDTSC | CPU_FEATURE_MSR | CPU_FEATURE_CR4 | CPU_FEATURE_VME | CPU_FEATURE_MMX | CPU_FEATURE_PSE36 | CPU_FEATURE_SSE | CPU_FEATURE_SSE2 | CPU_FEATURE_CLFLUSH | CPU_FEATURE_LAPIC;
+            msr.fcr      = (1 << 8) | (1 << 9) | (1 << 12) | (1 << 16) | (1 << 19) | (1 << 21);
+            cpu_CR4_mask = CR4_VME | CR4_PVI | CR4_TSD | CR4_DE | CR4_PSE | CR4_MCE | CR4_PAE | CR4_PCE | CR4_PGE;
+            cpu_CR4_mask |= CR4_OSFXSR | CR4_OSXMMEXCPT;
+
+#ifdef USE_DYNAREC
+            codegen_timing_set(&codegen_timing_p6);
+#endif
+            break;
+
+        case CPU_GENERICINTEL:
+#ifdef USE_DYNAREC
+            x86_setopcodes(ops_386, ops_genericintel_0f, dynarec_ops_386, dynarec_ops_genericintel_0f);
+            if (fpu_softfloat) {
+                x86_dynarec_opcodes_da_a16 = dynarec_ops_sf_fpu_686_da_a16;
+                x86_dynarec_opcodes_da_a32 = dynarec_ops_sf_fpu_686_da_a32;
+                x86_dynarec_opcodes_db_a16 = dynarec_ops_sf_fpu_sse3_db_a16;
+                x86_dynarec_opcodes_db_a32 = dynarec_ops_sf_fpu_sse3_db_a32;
+                x86_dynarec_opcodes_dd_a16 = dynarec_ops_sf_fpu_sse3_dd_a16;
+                x86_dynarec_opcodes_dd_a32 = dynarec_ops_sf_fpu_sse3_dd_a32;
+                x86_dynarec_opcodes_df_a16 = dynarec_ops_sf_fpu_sse3_df_a16;
+                x86_dynarec_opcodes_df_a32 = dynarec_ops_sf_fpu_sse3_df_a32;
+            } else {
+                x86_dynarec_opcodes_da_a16 = dynarec_ops_fpu_686_da_a16;
+                x86_dynarec_opcodes_da_a32 = dynarec_ops_fpu_686_da_a32;
+                x86_dynarec_opcodes_db_a16 = dynarec_ops_fpu_sse3_db_a16;
+                x86_dynarec_opcodes_db_a32 = dynarec_ops_fpu_sse3_db_a32;
+                x86_dynarec_opcodes_dd_a16 = dynarec_ops_fpu_sse3_dd_a16;
+                x86_dynarec_opcodes_dd_a32 = dynarec_ops_fpu_sse3_dd_a32;
+                x86_dynarec_opcodes_df_a16 = dynarec_ops_fpu_sse3_df_a16;
+                x86_dynarec_opcodes_df_a32 = dynarec_ops_fpu_sse3_df_a32;
+            }
+            x86_dynarec_opcodes_REPE_0f = dynarec_ops_genericintel_REPE_0f;
+            x86_dynarec_opcodes_REPNE_0f = dynarec_ops_genericintel_REPNE_0f;
+            x86_dynarec_opcodes_0f_38 = dynarec_ops_genericintel_0f_38;
+            x86_dynarec_opcodes_0f_3a = dynarec_ops_genericintel_0f_3a;
+#else
+            x86_setopcodes(ops_386, ops_genericintel_0f);
+#endif
+            x86_opcodes_REPE_0f = ops_genericintel_REPE_0f;
+            x86_opcodes_REPNE_0f = ops_genericintel_REPNE_0f;
+            x86_opcodes_0f_38 = ops_genericintel_0f_38;
+            x86_opcodes_0f_3a = ops_genericintel_0f_3a;
+            if (fpu_softfloat) {
+                x86_opcodes_da_a16 = ops_sf_fpu_686_da_a16;
+                x86_opcodes_da_a32 = ops_sf_fpu_686_da_a32;
+                x86_opcodes_db_a16 = ops_sf_fpu_sse3_db_a16;
+                x86_opcodes_db_a32 = ops_sf_fpu_sse3_db_a32;
+                x86_opcodes_dd_a16 = ops_sf_fpu_sse3_dd_a16;
+                x86_opcodes_dd_a32 = ops_sf_fpu_sse3_dd_a32;
+                x86_opcodes_df_a16 = ops_sf_fpu_sse3_df_a16;
+                x86_opcodes_df_a32 = ops_sf_fpu_sse3_df_a32;
+            } else {
+                x86_opcodes_da_a16 = ops_fpu_686_da_a16;
+                x86_opcodes_da_a32 = ops_fpu_686_da_a32;
+                x86_opcodes_db_a16 = ops_fpu_sse3_db_a16;
+                x86_opcodes_db_a32 = ops_fpu_sse3_db_a32;
+                x86_opcodes_dd_a16 = ops_fpu_sse3_dd_a16;
+                x86_opcodes_dd_a32 = ops_fpu_sse3_dd_a32;
+                x86_opcodes_df_a16 = ops_fpu_sse3_df_a16;
+                x86_opcodes_df_a32 = ops_fpu_sse3_df_a32;
+            }
+
+            timing_rr  = 1; /* register dest - register src */
+            timing_rm  = 2; /* register dest - memory src */
+            timing_mr  = 3; /* memory dest   - register src */
+            timing_mm  = 3;
+            timing_rml = 2; /* register dest - memory src long */
+            timing_mrl = 3; /* memory dest   - register src long */
+            timing_mml = 3;
+            timing_bt  = 0; /* branch taken */
+            timing_bnt = 1; /* branch not taken */
+
+            timing_int                = 6;
+            timing_int_rm             = 11;
+            timing_int_v86            = 54;
+            timing_int_pm             = 25;
+            timing_int_pm_outer       = 42;
+            timing_iret_rm            = 7;
+            timing_iret_v86           = 27; /* unknown */
+            timing_iret_pm            = 10;
+            timing_iret_pm_outer      = 27;
+            timing_call_rm            = 4;
+            timing_call_pm            = 4;
+            timing_call_pm_gate       = 22;
+            timing_call_pm_gate_inner = 44;
+            timing_retf_rm            = 4;
+            timing_retf_pm            = 4;
+            timing_retf_pm_outer      = 23;
+            timing_jmp_rm             = 3;
+            timing_jmp_pm             = 3;
+            timing_jmp_pm_gate        = 18;
+
+            timing_misaligned = 3;
+
+            cpu_features = CPU_FEATURE_RDTSC | CPU_FEATURE_MSR | CPU_FEATURE_CR4 | CPU_FEATURE_VME | CPU_FEATURE_MMX | CPU_FEATURE_PSE36 | CPU_FEATURE_SSE | CPU_FEATURE_SSE2 | CPU_FEATURE_CLFLUSH | CPU_FEATURE_NX | CPU_FEATURE_LAPIC;
+            msr.fcr      = (1 << 8) | (1 << 9) | (1 << 12) | (1 << 16) | (1 << 19) | (1 << 21);
+            cpu_CR4_mask = CR4_VME | CR4_PVI | CR4_TSD | CR4_DE | CR4_PSE | CR4_MCE | CR4_PAE | CR4_PCE | CR4_PGE;
+            cpu_CR4_mask |= CR4_OSFXSR | CR4_OSXMMEXCPT;
+
+#ifdef USE_DYNAREC
+            codegen_timing_set(&codegen_timing_p6);
+#endif
+            break;
+
+        case CPU_ATHLON:
+#ifdef USE_DYNAREC
+            x86_setopcodes(ops_386, ops_k62_0f, dynarec_ops_386, dynarec_ops_k62_0f);
+            x86_dynarec_opcodes_da_a16  = dynarec_ops_fpu_686_da_a16;
+            x86_dynarec_opcodes_da_a32  = dynarec_ops_fpu_686_da_a32;
+            x86_dynarec_opcodes_db_a16  = dynarec_ops_fpu_686_db_a16;
+            x86_dynarec_opcodes_db_a32  = dynarec_ops_fpu_686_db_a32;
+            x86_dynarec_opcodes_df_a16  = dynarec_ops_fpu_686_df_a16;
+            x86_dynarec_opcodes_df_a32  = dynarec_ops_fpu_686_df_a32;
+            x86_dynarec_opcodes_3DNOW = dynarec_ops_3DNOWE;
+#else
+            x86_setopcodes(ops_386, ops_k62_0f);
+#endif
+            x86_opcodes_3DNOW = ops_3DNOWE;
+            x86_opcodes_da_a16  = ops_fpu_686_da_a16;
+            x86_opcodes_da_a32  = ops_fpu_686_da_a32;
+            x86_opcodes_db_a16  = ops_fpu_686_db_a16;
+            x86_opcodes_db_a32  = ops_fpu_686_db_a32;
+            x86_opcodes_df_a16  = ops_fpu_686_df_a16;
+            x86_opcodes_df_a32  = ops_fpu_686_df_a32;
+
+            timing_rr  = 1; /* register dest - register src */
+            timing_rm  = 2; /* register dest - memory src */
+            timing_mr  = 3; /* memory dest   - register src */
+            timing_mm  = 3;
+            timing_rml = 2; /* register dest - memory src long */
+            timing_mrl = 3; /* memory dest   - register src long */
+            timing_mml = 3;
+            timing_bt  = 0; /* branch taken */
+            timing_bnt = 1; /* branch not taken */
+
+            timing_int                = 6;
+            timing_int_rm             = 11;
+            timing_int_v86            = 54;
+            timing_int_pm             = 25;
+            timing_int_pm_outer       = 42;
+            timing_iret_rm            = 7;
+            timing_iret_v86           = 27; /* unknown */
+            timing_iret_pm            = 10;
+            timing_iret_pm_outer      = 27;
+            timing_call_rm            = 4;
+            timing_call_pm            = 4;
+            timing_call_pm_gate       = 22;
+            timing_call_pm_gate_inner = 44;
+            timing_retf_rm            = 4;
+            timing_retf_pm            = 4;
+            timing_retf_pm_outer      = 23;
+            timing_jmp_rm             = 3;
+            timing_jmp_pm             = 3;
+            timing_jmp_pm_gate        = 18;
+
+            timing_misaligned = 3;
+
+            cpu_features = CPU_FEATURE_RDTSC | CPU_FEATURE_MSR | CPU_FEATURE_CR4 | CPU_FEATURE_VME | CPU_FEATURE_MMX | CPU_FEATURE_3DNOW | CPU_FEATURE_3DNOWE | CPU_FEATURE_LAPIC;
+            msr.fcr = (1 << 8) | (1 << 9) | (1 << 12) | (1 << 16) | (1 << 19) | (1 << 21);
+            cpu_CR4_mask = CR4_VME | CR4_PVI | CR4_TSD | CR4_DE | CR4_PSE | CR4_MCE;
+
+#ifdef USE_DYNAREC
+            codegen_timing_set(&codegen_timing_k6);
+#endif
+            amd_k7_smram_aseg = smram_add();
+            amd_k7_smram_tseg = smram_add();
             break;
 
         case CPU_CYRIX3S:
@@ -1826,9 +2189,104 @@ cpu_set(void)
 #endif /* USE_DYNAREC */
             break;
 
+        case CPU_CYRIX3N:
+#ifdef USE_DYNAREC
+            x86_setopcodes(ops_386, ops_nehemiah_0f, dynarec_ops_386, dynarec_ops_nehemiah_0f);
+
+            if (fpu_softfloat) {
+                x86_dynarec_opcodes_da_a16 = dynarec_ops_sf_fpu_686_da_a16;
+                x86_dynarec_opcodes_da_a32 = dynarec_ops_sf_fpu_686_da_a32;
+                x86_dynarec_opcodes_db_a16 = dynarec_ops_sf_fpu_686_db_a16;
+                x86_dynarec_opcodes_db_a32 = dynarec_ops_sf_fpu_686_db_a32;
+                x86_dynarec_opcodes_df_a16 = dynarec_ops_sf_fpu_686_df_a16;
+                x86_dynarec_opcodes_df_a32 = dynarec_ops_sf_fpu_686_df_a32;
+            } else {
+                x86_dynarec_opcodes_da_a16 = dynarec_ops_fpu_686_da_a16;
+                x86_dynarec_opcodes_da_a32 = dynarec_ops_fpu_686_da_a32;
+                x86_dynarec_opcodes_db_a16 = dynarec_ops_fpu_686_db_a16;
+                x86_dynarec_opcodes_db_a32 = dynarec_ops_fpu_686_db_a32;
+                x86_dynarec_opcodes_df_a16 = dynarec_ops_fpu_686_df_a16;
+                x86_dynarec_opcodes_df_a32 = dynarec_ops_fpu_686_df_a32;
+            }
+
+            x86_dynarec_opcodes_REPE_0f = dynarec_ops_nehemiah_REPE_0f;
+            x86_opcodes_REPE_0f         = ops_nehemiah_REPE_0f;
+#else
+            x86_setopcodes(ops_386, ops_nehemiah_0f);
+
+            x86_opcodes_REPE_0f = ops_nehemiah_REPE_0f;
+#endif
+
+            if (fpu_softfloat) {
+                x86_opcodes_da_a16 = ops_sf_fpu_686_da_a16;
+                x86_opcodes_da_a32 = ops_sf_fpu_686_da_a32;
+                x86_opcodes_db_a16 = ops_sf_fpu_686_db_a16;
+                x86_opcodes_db_a32 = ops_sf_fpu_686_db_a32;
+                x86_opcodes_df_a16 = ops_sf_fpu_686_df_a16;
+                x86_opcodes_df_a32 = ops_sf_fpu_686_df_a32;
+            } else {
+                x86_opcodes_da_a16 = ops_fpu_686_da_a16;
+                x86_opcodes_da_a32 = ops_fpu_686_da_a32;
+                x86_opcodes_db_a16 = ops_fpu_686_db_a16;
+                x86_opcodes_db_a32 = ops_fpu_686_db_a32;
+                x86_opcodes_df_a16 = ops_fpu_686_df_a16;
+                x86_opcodes_df_a32 = ops_fpu_686_df_a32;
+            }
+
+            timing_rr  = 1; /* register dest - register src */
+            timing_rm  = 2; /* register dest - memory src */
+            timing_mr  = 2; /* memory dest   - register src */
+            timing_mm  = 3;
+            timing_rml = 2; /* register dest - memory src long */
+            timing_mrl = 2; /* memory dest   - register src long */
+            timing_mml = 3;
+            timing_bt  = 2; /* branch taken */
+            timing_bnt = 1; /* branch not taken */
+
+            timing_int                = 6;
+            timing_int_rm             = 26; /* unknown */
+            timing_int_v86            = 82;
+            timing_int_pm             = 44;
+            timing_int_pm_outer       = 71;
+            timing_iret_rm            = 7;
+            timing_iret_v86           = 26;
+            timing_iret_pm            = 10;
+            timing_iret_pm_outer      = 26;
+            timing_call_rm            = 4;
+            timing_call_pm            = 15;
+            timing_call_pm_gate       = 26;
+            timing_call_pm_gate_inner = 35;
+            timing_retf_rm            = 4;
+            timing_retf_pm            = 7;
+            timing_retf_pm_outer      = 23;
+            timing_jmp_rm             = 5;
+            timing_jmp_pm             = 7;
+            timing_jmp_pm_gate        = 17;
+
+            timing_misaligned = 2;
+
+            cpu_features = CPU_FEATURE_RDTSC | CPU_FEATURE_MMX | CPU_FEATURE_MSR | CPU_FEATURE_CR4 | CPU_FEATURE_SSE;
+            msr.fcr      = (1 << 8) | (1 << 9) | (1 << 12) | (1 << 16) | (1 << 18) | (1 << 19) | (1 << 20) | (1 << 21);
+            cpu_CR4_mask = CR4_TSD | CR4_DE | CR4_MCE | CR4_PCE | CR4_PGE | CR4_OSXMMEXCPT | CR4_OSFXSR;
+
+            cpu_cyrix_alignment = 1;
+
+#ifdef USE_DYNAREC
+            codegen_timing_set(&codegen_timing_winchip);
+#endif
+            break;
+
         default:
             fatal("cpu_set : unknown CPU type %" PRIu64 "\n", cpu_s->cpu_type);
     }
+
+#ifdef USE_DYNAREC
+    if(x86_dynarec_opcodes_REPE_0f == NULL) x86_dynarec_opcodes_REPE_0f = x86_dynarec_opcodes_0f;
+    if(x86_dynarec_opcodes_REPNE_0f == NULL) x86_dynarec_opcodes_REPNE_0f = x86_dynarec_opcodes_0f;
+#endif
+
+    if(x86_opcodes_REPE_0f == NULL) x86_opcodes_REPE_0f = x86_opcodes_0f;
+    if(x86_opcodes_REPNE_0f == NULL) x86_opcodes_REPNE_0f = x86_opcodes_0f;
 
     switch (fpu_type) {
         case FPU_NONE:
@@ -1877,6 +2335,10 @@ cpu_set(void)
         cpu_exec = execx86;
     mmx_init();
     gdbstub_cpu_init();
+
+    if (cpu_features & CPU_FEATURE_LAPIC) {
+        device_add(&lapic_device);
+    }
 }
 
 void
@@ -2407,6 +2869,63 @@ cpu_CPUID(void)
             }
             break;
 
+        case CPU_ATHLON:
+            switch (EAX) {
+                case 0:
+                    EAX = 1;
+                    EBX = 0x68747541; /* AuthenticAMD */
+                    ECX = 0x444d4163;
+                    EDX = 0x69746e65;
+                    break;
+                case 1:
+                    EAX = CPUID;
+                    EBX = ECX = 0;
+                    EDX       = CPUID_FPU | CPUID_VME | CPUID_PSE | CPUID_TSC | CPUID_MSR | CPUID_MCE | CPUID_CMPXCHG8B | CPUID_MMX;
+                    break;
+                case 0x80000000:
+                    EAX = 0x80000007;
+                    EBX = ECX = EDX = 0;
+                    break;
+                case 0x80000001:
+                    EAX = CPUID + 0x100;
+                    EBX = ECX = 0;
+                    EDX       = CPUID_FPU | CPUID_VME | CPUID_PSE | CPUID_TSC | CPUID_MSR | CPUID_MCE | CPUID_CMPXCHG8B | CPUID_AMDSEP | CPUID_MMX | CPUID_3DNOW | CPUID_3DNOWE;
+                    break;
+                case 0x80000002:      /* Processor name string */
+                    EAX = 0x20444d41; /* AMD Athlon(tm) P */
+                    EBX = 0x6c687441;
+                    ECX = 0x74286e6f;
+                    EDX = 0x5020296d;
+                    break;
+                case 0x80000003:      /* Processor name string */
+                    EAX = 0x65636f72; /* rocessor */
+                    EBX = 0x726f7373;
+                    ECX = 0x00000000;
+                    EDX = 0x00000000;
+                    break;
+                case 0x80000005: /* Cache information */
+                    EAX = 0;
+                    EBX = 0x02800140; /* TLBs */
+                    ECX = 0x20020220; /* L1 data cache */
+                    EDX = 0x20020220; /* L1 instruction cache */
+                    break;
+                case 0x80000006: /* L2 Cache information */
+                    EAX = EBX = EDX = 0;
+                    if (cpu_s->cpu_type == CPU_K6_3P)
+                        ECX = 0x01004220;
+                    else
+                        ECX = 0x00804220;
+                    break;
+                case 0x80000007: /* PowerNow information */
+                    EAX = EBX = ECX = 0;
+                    EDX             = 7;
+                    break;
+                default:
+                    EAX = EBX = ECX = EDX = 0;
+                    break;
+            }
+            break;
+
         case CPU_PENTIUMMMX:
             if (!EAX) {
                 EAX = 0x00000001;
@@ -2486,7 +3005,7 @@ cpu_CPUID(void)
             } else if (EAX == 1) {
                 EAX = CPUID;
                 EBX = ECX = 0;
-                EDX       = CPUID_FPU | CPUID_VME | CPUID_DE | CPUID_PSE | CPUID_TSC | CPUID_MSR | CPUID_PAE | CPUID_MCE | CPUID_CMPXCHG8B | CPUID_MTRR | CPUID_PGE | CPUID_MCA | CPUID_SEP | CPUID_CMOV;
+                EDX       = CPUID_FPU | CPUID_VME | CPUID_DE | CPUID_PSE | CPUID_TSC | CPUID_MSR | CPUID_LAPIC | CPUID_PAE | CPUID_MCE | CPUID_CMPXCHG8B | CPUID_MTRR | CPUID_PGE | CPUID_MCA | CPUID_SEP | CPUID_CMOV;
                 /*
                    Return anything non-zero in bits 32-63 of the BIOS signature MSR
                    to indicate there has been an update.
@@ -2542,7 +3061,8 @@ cpu_CPUID(void)
             } else if (EAX == 1) {
                 EAX = CPUID;
                 EBX = ECX = 0;
-                EDX       = CPUID_FPU | CPUID_VME | CPUID_DE | CPUID_PSE | CPUID_TSC | CPUID_MSR | CPUID_PAE | CPUID_MCE | CPUID_CMPXCHG8B | CPUID_MMX | CPUID_MTRR | CPUID_PGE | CPUID_MCA | CPUID_SEP | CPUID_FXSR | CPUID_CMOV | CPUID_PSE36;
+                EDX       = CPUID_FPU | CPUID_VME | CPUID_DE | CPUID_PSE | CPUID_TSC | CPUID_MSR | CPUID_PAE | CPUID_MCE | CPUID_CMPXCHG8B | CPUID_MMX | CPUID_MTRR | CPUID_PGE | CPUID_MCA | CPUID_SEP | CPUID_FXSR | CPUID_CMOV | CPUID_PSE36 | CPUID_LAPIC;
+                if (!(msr.apic_base & (1 << 11))) EDX &= ~CPUID_LAPIC;
                 /*
                    Return anything non-zero in bits 32-63 of the BIOS signature MSR
                    to indicate there has been an update.
@@ -2565,6 +3085,85 @@ cpu_CPUID(void)
                         EDX = 0x0c040840; /* No 2nd-level cache */
                 } else /* Pentium II Deschutes and OverDrive */
                     EDX = 0x0c040843; /* 2nd-level cache: 512 KB, 4-way set associative, 32-byte line size */
+            } else
+                EAX = EBX = ECX = EDX = 0;
+            break;
+
+        case CPU_PENTIUM3:
+            if (!EAX) {
+                EAX = 0x00000002;
+                EBX = 0x756e6547;
+                EDX = 0x49656e69;
+                ECX = 0x6c65746e;
+            } else if (EAX == 1) {
+                EAX = CPUID;
+                EBX = ECX = 0;
+                EDX       = CPUID_FPU | CPUID_VME | CPUID_DE | CPUID_PSE | CPUID_TSC | CPUID_MSR | CPUID_PAE | CPUID_MCE | CPUID_CMPXCHG8B | CPUID_MMX | CPUID_MTRR | CPUID_PGE | CPUID_MCA | CPUID_SEP | CPUID_FXSR | CPUID_CMOV | CPUID_PSE36 | CPUID_SSE | CPUID_LAPIC;
+                if (!(msr.apic_base & (1 << 11))) EDX &= ~CPUID_LAPIC;
+            } else if (EAX == 2) {
+                EAX = 0x00000001;
+                EBX = ECX = 0;
+                EDX       = 0x00000000;
+            } else
+                EAX = EBX = ECX = EDX = 0;
+            break;
+
+        case CPU_PENTIUM4W:
+            if (!EAX) {
+                EAX = 0x00000002;
+                EBX = 0x756e6547;
+                EDX = 0x49656e69;
+                ECX = 0x6c65746e;
+            } else if (EAX == 1) {
+                EAX = CPUID;
+                EBX = (8 << 8) | (1 << 16);
+                ECX = 0;
+                EDX       = CPUID_FPU | CPUID_VME | CPUID_DE | CPUID_PSE | CPUID_TSC | CPUID_MSR | CPUID_PAE | CPUID_MCE | CPUID_CMPXCHG8B | CPUID_MMX | CPUID_MTRR | CPUID_PGE | CPUID_MCA | CPUID_SEP | CPUID_FXSR | CPUID_CMOV | CPUID_PSE36 | CPUID_SSE | CPUID_SSE2 | CPUID_CLFLUSH | CPUID_LAPIC;
+                if (!(msr.apic_base & (1 << 11))) EDX &= ~CPUID_LAPIC;
+            } else if (EAX == 2) {
+                EAX = 0x00000001;
+                EBX = ECX = 0;
+                EDX       = 0x00000000;
+            } else
+                EAX = EBX = ECX = EDX = 0;
+            break;
+
+        case CPU_GENERICINTEL:
+            if (!EAX) {
+                EAX = 0x00000005;
+                EBX = 0x756e6547;
+                EDX = 0x49656e69;
+                ECX = 0x6c65746e;
+            } else if (EAX == 1) {
+                EAX = CPUID;
+                EBX = (8 << 8) | (1 << 16);
+                ECX       = CPUID_SSE3;// | CPUID_MONITOR_MWAIT;// | CPUID_SSSE3;
+                EDX       = CPUID_FPU | CPUID_VME | CPUID_DE | CPUID_PSE | CPUID_TSC | CPUID_MSR | CPUID_PAE | CPUID_MCE | CPUID_CMPXCHG8B | CPUID_MMX | CPUID_MTRR | CPUID_PGE | CPUID_MCA | CPUID_SEP | CPUID_FXSR | CPUID_CMOV | CPUID_PSE36 | CPUID_SSE | CPUID_SSE2 | CPUID_CLFLUSH | CPUID_LAPIC;
+                if (!(msr.apic_base & (1 << 11))) EDX &= ~CPUID_LAPIC;
+            } else if (EAX == 2) {
+                EAX = 0x00000001;
+                EBX = ECX = 0;
+                EDX       = 0x00000000;
+            } else if (EAX == 5) {
+                if((msr.ecx1a0 & (1 << 22)))
+                {
+                    EAX = EBX = ECX = EDX = 0;
+                }
+                else
+                {
+                    EAX = EBX = 0x40;
+                    ECX = 0;
+                    EDX = 0x1120;
+                }
+            } else if (EAX == 0x80000000) {
+                EAX = 0x80000001;
+                EBX = 0x756e6547;
+                EDX = 0x49656e69;
+                ECX = 0x6c65746e;
+            } else if (EAX == 0x80000001) {
+                EAX = CPUID;
+                EBX = ECX = 0;
+                EDX       = CPUID_FPU | CPUID_VME | CPUID_PSE | CPUID_TSC | CPUID_MSR | CPUID_PAE | CPUID_MCE | CPUID_CMPXCHG8B | CPUID_MMX | CPUID_MTRR | CPUID_PGE | CPUID_MCA | CPUID_SEP | CPUID_FXSR | CPUID_CMOV | CPUID_NX;
             } else
                 EAX = EBX = ECX = EDX = 0;
             break;
@@ -2593,7 +3192,7 @@ cpu_CPUID(void)
                         EDX |= CPUID_PGE;
                     break;
                 case 0x80000000:
-                    EAX = 0x80000005;
+                     EAX = ((CPUID >= 0x670) ? 0x80000006 : 0x80000005);
                     break;
                 case 0x80000001:
                     EAX = CPUID;
@@ -2604,15 +3203,87 @@ cpu_CPUID(void)
                         EDX |= CPUID_PGE;
                     break;
                 case 0x80000002:      /* Processor name string */
-                    EAX = 0x20414956; /* VIA Samuel */
-                    EBX = 0x756d6153;
-                    ECX = 0x00006c65;
-                    EDX = 0x00000000;
+                    EAX = 0x20414956;
+                    if (CPUID >= 0x678) {
+                        EBX = 0x61727a45; /* VIA Ezra */
+                        ECX = 0x00000000;
+                    } else if (CPUID >= 0x670) {
+                        EBX = 0x756d6153; /* VIA Samuel 2 */
+                        ECX = 0x32206c65;
+                    } else {
+                        EBX = 0x756d6153; /* VIA Samuel */
+                        ECX = 0x00006c65;
+                    }
                     break;
                 case 0x80000005:      /* Cache information */
                     EBX = 0x08800880; /* TLBs */
                     ECX = 0x40040120; /* L1 data cache */
                     EDX = 0x40020120; /* L1 instruction cache */
+                    break;
+                case 0x80000006:
+                    if (CPUID >= 0x670)
+                        ECX = 0x40040120; /* L2 data cache */
+                default:
+                    EAX = EBX = ECX = EDX = 0;
+                    break;
+            }
+            break;
+
+        case CPU_CYRIX3N:
+            switch (EAX) {
+                case 0:
+                    EAX = 1;
+                    if (msr.fcr2 & (1 << 14)) {
+                        EBX = msr.fcr3 >> 32;
+                        ECX = msr.fcr3 & 0xffffffff;
+                        EDX = msr.fcr2 >> 32;
+                    } else {
+                        EBX = 0x746e6543; /* CentaurHauls */
+                        ECX = 0x736c7561;
+                        EDX = 0x48727561;
+                    }
+                    break;
+                case 1:
+                    EAX = ((msr.fcr2 & 0x0ff0) ? ((msr.fcr2 & 0x0ff0) | (CPUID & 0xf00f)) : CPUID);
+                    EBX = ECX = 0;
+                    EDX       = CPUID_FPU | CPUID_DE | CPUID_TSC | CPUID_MSR | CPUID_MCE | CPUID_MMX | CPUID_MTRR | CPUID_CMOV | CPUID_FXSR | CPUID_SSE;
+                    if (cpu_has_feature(CPU_FEATURE_CX8))
+                        EDX |= CPUID_CMPXCHG8B;
+                    if (msr.fcr & (1 << 7))
+                        EDX |= CPUID_PGE;
+                    break;
+                case 0x80000000:
+                    EAX = 0x80000006;
+                    break;
+                case 0x80000001:
+                    EAX = CPUID;
+                    EDX = CPUID_FPU | CPUID_DE | CPUID_TSC | CPUID_MSR | CPUID_MCE | CPUID_MMX | CPUID_MTRR | CPUID_CMOV | CPUID_FXSR;
+                    if (cpu_has_feature(CPU_FEATURE_CX8))
+                        EDX |= CPUID_CMPXCHG8B;
+                    if (msr.fcr & (1 << 7))
+                        EDX |= CPUID_PGE;
+                    break;
+                case 0x80000002:      /* Processor name string */
+                    EAX = 0x20414956; /* VIA C3 Nehemiah */
+                    EBX = 0x4e203343;
+                    ECX = 0x6d656865;
+                    EDX = 0x00686169;
+                    break;
+                case 0x80000005:      /* Cache information */
+                    EBX = 0x08800880; /* TLBs */
+                    ECX = 0x40040120; /* L1 data cache */
+                    EDX = 0x40020120; /* L1 instruction cache */
+                    break;
+                case 0x80000006:
+                    ECX = 0x00408120; /* L2 data cache */
+                    break;
+                case 0xc0000000:
+                    EAX = 0xc0000001;
+                    break;
+                case 0xc0000001: /* Centaur extended feature flags */
+                    EDX = 0x00000014;
+                    if (msr.padlock_rng & 0x40)
+                        EDX |= 0x8;
                     break;
                 default:
                     EAX = EBX = ECX = EDX = 0;
@@ -2620,6 +3291,143 @@ cpu_CPUID(void)
             }
             break;
     }
+}
+
+void
+cpu_reset_longhaul(void)
+{
+    msr.longhaul = 0x641000000000001ULL; /* RevID 1, min FSB=66MHz, max FSB=133 MHz, min voltage=1.05 V, min mult=3.0x */
+    if (cpu_s->cpu_type >= CPU_CYRIX3N)
+        msr.longhaul |= ((1ULL << 51) | (1ULL << 49)); /* raise min mult to 5x if Nehemiah */
+
+    if (cpu_dmulti == 3) {
+        msr.bcr2 = ((0 << 26) | (0 << 25) | (0 << 24) | (1 << 23)); /* curr multiplier (v1) */
+        msr.longhaul |= ((0 << 19) | (0 << 18) | (0 << 17) | (1 << 16)); /* curr multiplier (v2) */
+        msr.longhaul |= ((0ULL << 35) | (0ULL << 34) | (0ULL << 33) | (1ULL << 32)); /* max multiplier=curr */
+    } else if (cpu_dmulti == 3.5) {
+        msr.bcr2 = ((0 << 26) | (1 << 25) | (0 << 24) | (1 << 23));
+        msr.longhaul |= ((0 << 19) | (1 << 18) | (0 << 17) | (1 << 16));
+        msr.longhaul |= ((0ULL << 35) | (1ULL << 34) | (0ULL << 33) | (1ULL << 32));
+    } else if (cpu_dmulti == 4) {
+        msr.bcr2 = ((0 << 26) | (0 << 25) | (1 << 24) | (0 << 23));
+        msr.longhaul |= ((0 << 19) | (0 << 18) | (1 << 17) | (0 << 16));
+        msr.longhaul |= ((0ULL << 35) | (0ULL << 34) | (1ULL << 33) | (0ULL << 32));
+    } else if (cpu_dmulti == 4.5) {
+        msr.bcr2 = ((0 << 26) | (1 << 25) | (1 << 24) | (0 << 23));
+        msr.longhaul |= ((0 << 19) | (1 << 18) | (1 << 17) | (0 << 16));
+        msr.longhaul |= ((0ULL << 35) | (1ULL << 34) | (1ULL << 33) | (0ULL << 32));
+    } else if (cpu_dmulti == 5) {
+        msr.bcr2 = ((1 << 26) | (0 << 25) | (1 << 24) | (1 << 23));
+        msr.longhaul |= ((1 << 19) | (0 << 18) | (1 << 17) | (1 << 16));
+        msr.longhaul |= ((1ULL << 35) | (0ULL << 34) | (1ULL << 33) | (1ULL << 32));
+    } else if (cpu_dmulti == 5.5) {
+        msr.bcr2 = ((0 << 26) | (1 << 25) | (1 << 24) | (1 << 23));
+        msr.longhaul |= ((0 << 19) | (1 << 18) | (1 << 17) | (1 << 16));
+        msr.longhaul |= ((0ULL << 35) | (1ULL << 34) | (1ULL << 33) | (1ULL << 32));
+    } else if (cpu_dmulti == 6) {
+        msr.bcr2 = ((1 << 26) | (0 << 25) | (0 << 24) | (0 << 23));
+        msr.longhaul |= ((1 << 19) | (0 << 18) | (0 << 17) | (0 << 16));
+        msr.longhaul |= ((1ULL << 35) | (0ULL << 34) | (0ULL << 33) | (0ULL << 32));
+    } else if (cpu_dmulti == 6.5) {
+        msr.bcr2 = ((1 << 26) | (1 << 25) | (0 << 24) | (0 << 23));
+        msr.longhaul |= ((1 << 19) | (1 << 18) | (0 << 17) | (0 << 16));
+        msr.longhaul |= ((1ULL << 35) | (1ULL << 34) | (0ULL << 33) | (0ULL << 32));
+    } else if (cpu_dmulti == 7) {
+        msr.bcr2 = ((1 << 26) | (0 << 25) | (0 << 24) | (1 << 23));
+        msr.longhaul |= ((1 << 19) | (0 << 18) | (0 << 17) | (1 << 16));
+        msr.longhaul |= ((1ULL << 35) | (0ULL << 34) | (0ULL << 33) | (1ULL << 32));
+    } else if (cpu_dmulti == 7.5) {
+        msr.bcr2 = ((1 << 26) | (1 << 25) | (0 << 24) | (1 << 23));
+        msr.longhaul |= ((1 << 19) | (1 << 18) | (0 << 17) | (1 << 16));
+        msr.longhaul |= ((1ULL << 35) | (1ULL << 34) | (0ULL << 33) | (1ULL << 32));
+    } else if (cpu_dmulti == 8) {
+        msr.bcr2 = ((1 << 26) | (0 << 25) | (1 << 24) | (0 << 23));
+        msr.longhaul |= ((1 << 19) | (0 << 18) | (1 << 17) | (0 << 16));
+        msr.longhaul |= ((1ULL << 35) | (0ULL << 34) | (1ULL << 33) | (0ULL << 32));
+    } else if (cpu_dmulti == 8.5) {
+        msr.bcr2 = ((1 << 26) | (1 << 25) | (1 << 24) | (0 << 23));
+        msr.longhaul |= ((1 << 19) | (1 << 18) | (1 << 17) | (0 << 16));
+        msr.longhaul |= ((1ULL << 35) | (1ULL << 34) | (1ULL << 33) | (0ULL << 32));
+    } else if (cpu_dmulti == 9) {
+        msr.bcr2 = ((0 << 26) | (0 << 25) | (1 << 24) | (1 << 23));
+        msr.longhaul |= ((0 << 19) | (0 << 18) | (1 << 17) | (1 << 16));
+        msr.longhaul |= ((0ULL << 35) | (0ULL << 34) | (1ULL << 33) | (1ULL << 32));
+    } else if (cpu_dmulti == 9.5) {
+        msr.bcr2 = ((0 << 26) | (1 << 25) | (0 << 24) | (0 << 23));
+        msr.longhaul |= ((0 << 19) | (1 << 18) | (0 << 17) | (0 << 16));
+        msr.longhaul |= ((0ULL << 35) | (1ULL << 34) | (0ULL << 33) | (0ULL << 32));
+    } else if (cpu_dmulti == 10) {
+        msr.bcr2 = 0;
+        msr.longhaul |= 0;
+    } else if (cpu_dmulti == 10.5) {
+        msr.longhaul |= ((1 << 14) | (0 << 19) | (1 << 18) | (0 << 17) | (0 << 16));
+        msr.longhaul |= ((1ULL << 43) | (0ULL << 35) | (1ULL << 34) | (0ULL << 33) | (0ULL << 32));
+    } else if (cpu_dmulti == 11) {
+        msr.longhaul |= ((1 << 14) | (0 << 19) | (0 << 18) | (0 << 17) | (1 << 16));
+        msr.longhaul |= ((1ULL << 43) | (0ULL << 35) | (0ULL << 34) | (0ULL << 33) | (1ULL << 32));
+    } else if (cpu_dmulti == 11.5) {
+        msr.longhaul |= ((1 << 14) | (0 << 19) | (1 << 18) | (0 << 17) | (1 << 16));
+        msr.longhaul |= ((1ULL << 43) | (0ULL << 35) | (1ULL << 34) | (0ULL << 33) | (1ULL << 32));
+    } else if (cpu_dmulti == 12) {
+        msr.bcr2 = ((1 << 26) | (1 << 25) | (1 << 24) | (1 << 23));
+        msr.longhaul |= ((1 << 19) | (1 << 18) | (1 << 17) | (1 << 16));
+        msr.longhaul |= ((1ULL << 35) | (1ULL << 34) | (1ULL << 33) | (1ULL << 32));
+    } else if (cpu_dmulti == 12.5) {
+        msr.longhaul |= ((1 << 14) | (0 << 19) | (1 << 18) | (1 << 17) | (0 << 16));
+        msr.longhaul |= ((1ULL << 43) | (0ULL << 35) | (1ULL << 34) | (1ULL << 33) | (0ULL << 32));
+    } else if (cpu_dmulti == 13) {
+        msr.longhaul |= ((1 << 14) | (1 << 19) | (0 << 18) | (1 << 17) | (1 << 16));
+        msr.longhaul |= ((1ULL << 43) | (1ULL << 35) | (0ULL << 34) | (1ULL << 33) | (1ULL << 32));
+    } else if (cpu_dmulti == 13.5) {
+        msr.longhaul |= ((1 << 14) | (0 << 19) | (1 << 18) | (1 << 17) | (1 << 16));
+        msr.longhaul |= ((1ULL << 43) | (0ULL << 35) | (1ULL << 34) | (1ULL << 33) | (1ULL << 32));
+    } else if (cpu_dmulti == 14) {
+        msr.longhaul |= ((1 << 14) | (1 << 19) | (0 << 18) | (0 << 17) | (0 << 16));
+        msr.longhaul |= ((1ULL << 43) | (1ULL << 35) | (0ULL << 34) | (0ULL << 33) | (0ULL << 32));
+    } else if (cpu_dmulti == 14.5) {
+        msr.longhaul |= ((1 << 14) | (1 << 19) | (1 << 18) | (0 << 17) | (0 << 16));
+        msr.longhaul |= ((1ULL << 43) | (1ULL << 35) | (1ULL << 34) | (0ULL << 33) | (0ULL << 32));
+    } else if (cpu_dmulti == 15) {
+        msr.longhaul |= ((1 << 14) | (1 << 19) | (0 << 18) | (0 << 17) | (1 << 16));
+        msr.longhaul |= ((1ULL << 43) | (1ULL << 35) | (0ULL << 34) | (0ULL << 33) | (1ULL << 32));
+    } else if (cpu_dmulti == 15.5) {
+        msr.longhaul |= ((1 << 14) | (1 << 19) | (1 << 18) | (0 << 17) | (1 << 16));
+        msr.longhaul |= ((1ULL << 43) | (1ULL << 35) | (1ULL << 34) | (0ULL << 33) | (1ULL << 32));
+    } else if (cpu_dmulti == 16) {
+        msr.longhaul |= ((1 << 14) | (1 << 19) | (0 << 18) | (1 << 17) | (0 << 16));
+        msr.longhaul |= ((1ULL << 43) | (1ULL << 35) | (0ULL << 34) | (1ULL << 33) | (0ULL << 32));
+    } else {
+        msr.bcr2 = ((0 << 26) | (0 << 25) | (0 << 24) | (1 << 23));
+        msr.longhaul |= ((0 << 19) | (0 << 18) | (0 << 17) | (1 << 16));
+        msr.longhaul |= ((0ULL << 35) | (0ULL << 34) | (0ULL << 33) | (1ULL << 32));
+    }
+
+    if (cpu_s->voltage == 1050) {
+        msr.longhaul |= ((0 << 23) | (1 << 22) | (0 << 21) | (0 << 20)); /* curr voltage */
+        msr.longhaul |= ((0ULL << 39) | (0ULL << 38) | (1ULL << 37) | (1ULL << 36)); /* max voltage=curr+0.05 V */
+    } else if (cpu_s->voltage == 1200) {
+        msr.longhaul |= ((0 << 23) | (0 << 22) | (0 << 21) | (1 << 20));
+    } else if (cpu_s->voltage == 1350) {
+        msr.longhaul |= ((1 << 23) | (1 << 22) | (1 << 21) | (0 << 20));
+        msr.longhaul |= ((1ULL << 39) | (1ULL << 38) | (0ULL << 37) | (1ULL << 36));
+    } else if (cpu_s->voltage == 1400) {
+        msr.longhaul |= ((1 << 23) | (1 << 22) | (0 << 21) | (1 << 20));
+        msr.longhaul |= ((1ULL << 39) | (1ULL << 38) | (0ULL << 37) | (0ULL << 36));
+    } else if (cpu_s->voltage == 1450) {
+        msr.longhaul |= ((1 << 23) | (1 << 22) | (0 << 21) | (0 << 20));
+        msr.longhaul |= ((1ULL << 39) | (0ULL << 38) | (1ULL << 37) | (1ULL << 36));
+    } else if (cpu_s->voltage == 1600) {
+        msr.longhaul |= ((1 << 23) | (0 << 22) | (0 << 21) | (1 << 20));
+        msr.longhaul |= ((1ULL << 39) | (0ULL << 38) | (0ULL << 37) | (0ULL << 36));
+    } else {
+        msr.longhaul |= ((1 << 23) | (1 << 22) | (0 << 21) | (1 << 20));
+        msr.longhaul |= ((1ULL << 39) | (1ULL << 38) | (0ULL << 37) | (0ULL << 36));
+    }
+
+    if (cpu_busspeed < 112000000)
+        msr.longhaul |= (1 << 28);
+    if (cpu_busspeed < 84000000)
+        msr.longhaul |= (1 << 29);
 }
 
 void
@@ -2637,6 +3445,10 @@ cpu_ven_reset(void)
                 msr.mcr_ctrl |= (1 << 17);
             }
             break;
+        
+        case CPU_ATHLON:
+            msr.mtrr_cap = 0x00000508ULL;
+            /* FALLTHROUGH */
 
         case CPU_K6_2P:
         case CPU_K6_3P:
@@ -2673,7 +3485,10 @@ cpu_ven_reset(void)
         case CPU_PENTIUMPRO:
         case CPU_PENTIUM2:
         case CPU_PENTIUM2D:
+        case CPU_PENTIUM3:
+        case CPU_GENERICINTEL:
             msr.mtrr_cap = 0x00000508ULL;
+            msr.apic_base = 0xFEE00000ULL | (1 << 11) | (1 << 8);
 
             /* 4 GB cacheable space on Deschutes 651h and later (including the 1632h
                Overdrive) according to the Pentium II Processor Specification Update.
@@ -2682,10 +3497,22 @@ cpu_ven_reset(void)
                 msr.bbl_cr_ctl3 |= 0x00300000;
             break;
 
+        case CPU_PENTIUM4W:
+            msr.mtrr_cap = 0x00000508ULL;
+            msr.apic_base = 0xFEE00000ULL | (1 << 11) | (1 << 8);
+            break;
+
         case CPU_CYRIX3S:
             msr.fcr = (1 << 7) | (1 << 8) | (1 << 9) | (1 << 12) | (1 << 16) | (1 << 18) | (1 << 19) |
                       (1 << 20) | (1 << 21);
+            cpu_reset_longhaul();
             break;
+
+        case CPU_CYRIX3N:
+            msr.fcr         = (1 << 7) | (1 << 8) | (1 << 9) | (1 << 12) | (1 << 16) | (1 << 18) |
+                              (1 << 19) | (1 << 21);
+            msr.padlock_rng = 0x00000040;
+            cpu_reset_longhaul();
     }
 }
 
@@ -2741,6 +3568,10 @@ cpu_RDMSR(void)
                 case 0x10:
                     EAX = tsc & 0xffffffff;
                     EDX = tsc >> 32;
+#ifdef USE_DYNAREC
+                    if (cpu_use_dynarec)
+                        update_tsc();
+#endif
                     break;
                 /* Performance Monitor - Control and Event Select */
                 case 0x11:
@@ -2784,6 +3615,7 @@ cpu_RDMSR(void)
             break;
 
         case CPU_CYRIX3S:
+        case CPU_CYRIX3N:
             EAX = EDX = 0;
             switch (ECX) {
                 /* Machine Check Exception Address */
@@ -2795,6 +3627,10 @@ cpu_RDMSR(void)
                 case 0x10:
                     EAX = tsc & 0xffffffff;
                     EDX = tsc >> 32;
+#ifdef USE_DYNAREC
+                    if (cpu_use_dynarec)
+                        update_tsc();
+#endif
                     break;
                 /* EBL_CR_POWERON - Processor Hard Power-On Configuration */
                 case 0x2a:
@@ -2818,10 +3654,48 @@ cpu_RDMSR(void)
                         EAX |= ((1 << 25) | (1 << 24) | (1 << 23) | (1 << 22));
                     else if (cpu_dmulti == 7)
                         EAX |= ((1 << 25) | (0 << 24) | (0 << 23) | (1 << 22));
+                    else if (cpu_dmulti == 7.5)
+                        EAX |= ((1 << 25) | (1 << 24) | (0 << 23) | (1 << 22));
+                    else if (cpu_dmulti == 8)
+                        EAX |= ((1 << 25) | (0 << 24) | (1 << 23) | (0 << 22));
+                    else if (cpu_dmulti == 8.5)
+                        EAX |= ((1 << 25) | (1 << 24) | (1 << 23) | (0 << 22));
+                    else if (cpu_dmulti == 9)
+                        EAX |= ((1 << 25) | (0 << 24) | (0 << 23) | (0 << 22));
+                    else if (cpu_dmulti == 9.5)
+                        EAX |= ((0 << 25) | (1 << 24) | (1 << 23) | (1 << 22));
+                    else if (cpu_dmulti == 10)
+                        EAX |= ((0 << 25) | (0 << 24) | (1 << 23) | (1 << 22));
+                    else if (cpu_dmulti == 10.5)
+                        EAX |= ((1 << 27) | (0 << 25) | (1 << 24) | (1 << 23) | (1 << 22));
+                    else if (cpu_dmulti == 11)
+                        EAX |= ((1 << 27) | (0 << 25) | (0 << 24) | (0 << 23) | (1 << 22));
+                    else if (cpu_dmulti == 11.5)
+                        EAX |= ((1 << 27) | (0 << 25) | (1 << 24) | (0 << 23) | (1 << 22));
+                    else if (cpu_dmulti == 12)
+                        EAX |= ((1 << 25) | (1 << 24) | (0 << 23) | (0 << 22));
+                    else if (cpu_dmulti == 12.5)
+                        EAX |= ((1 << 27) | (0 << 25) | (1 << 24) | (1 << 23) | (0 << 22));
+                    else if (cpu_dmulti == 13)
+                        EAX |= ((1 << 27) | (1 << 25) | (0 << 24) | (0 << 23) | (0 << 22));
+                    else if (cpu_dmulti == 13.5)
+                        EAX |= ((1 << 27) | (0 << 25) | (1 << 24) | (0 << 23) | (0 << 22));
+                    else if (cpu_dmulti == 14)
+                        EAX |= ((1 << 27) | (1 << 25) | (0 << 24) | (1 << 23) | (1 << 22));
+                    else if (cpu_dmulti == 14.5)
+                        EAX |= ((1 << 27) | (1 << 25) | (1 << 24) | (1 << 23) | (1 << 22));
+                    else if (cpu_dmulti == 15)
+                        EAX |= ((1 << 27) | (1 << 25) | (0 << 24) | (0 << 23) | (1 << 22));
+                    else if (cpu_dmulti == 15.5)
+                        EAX |= ((1 << 27) | (1 << 25) | (1 << 24) | (0 << 23) | (1 << 22));
+                    else if (cpu_dmulti == 16)
+                        EAX |= ((1 << 27) | (1 << 25) | (0 << 24) | (1 << 23) | (0 << 22));
                     else
                         EAX |= ((0 << 25) | (0 << 24) | (0 << 23) | (1 << 22));
                     if (cpu_busspeed >= 84000000)
                         EAX |= (1 << 19);
+                    else if (cpu_busspeed >= 112000000)
+                        EAX |= (1 << 18);
                     break;
                 /* PERFCTR0 - Performance Counter Register 0 - aliased to TSC */
                 case 0xc1:
@@ -2854,6 +3728,33 @@ cpu_RDMSR(void)
                 case 0x1108:
                     EAX = msr.fcr2 & 0xffffffff;
                     EDX = msr.fcr2 >> 32;
+                    break;
+                /* LongHaul/PowerSaver */
+                case 0x110a:
+                    if (CPUID < 0x670)
+                        x86gpf(NULL, 0);
+                    else {
+                        EAX = msr.longhaul & 0xffffffff;
+                        EDX = msr.longhaul >> 32;
+                    }
+                    break;
+                /* PadLock */
+                case 0x110b:
+                    if (cpu_s->cpu_type < CPU_CYRIX3N) {
+                        x86gpf(NULL, 0);
+                    } else {
+                        EAX = msr.padlock_rng;
+                        EDX = 0;
+                    }
+                    break;
+                /* Bus Control Register 2 */
+                case 0x1147:
+                    if (cpu_s->cpu_type >= CPU_CYRIX3N)
+                        x86gpf(NULL, 0);
+                    else {
+                        EAX = msr.bcr2;
+                        EDX = 0;
+                    }
                     break;
                 /* ECX & 0: MTRRphysBase0 ... MTRRphysBase7
                    ECX & 1: MTRRphysMask0 ... MTRRphysMask7 */
@@ -2904,6 +3805,7 @@ cpu_RDMSR(void)
         case CPU_K6_3:
         case CPU_K6_2P:
         case CPU_K6_3P:
+        case CPU_ATHLON:
             EAX = 0;
             /* EDX is left unchanged when reading this MSR! */
             if (ECX != 0x82)
@@ -2927,6 +3829,119 @@ cpu_RDMSR(void)
                 case 0x00000010:
                     EAX = tsc & 0xffffffff;
                     EDX = tsc >> 32;
+#ifdef USE_DYNAREC
+                    if (cpu_use_dynarec)
+                        update_tsc();
+#endif
+                    break;
+                case 0x1b:
+                    EAX = msr.apic_base & 0xffffffff;
+                    EDX = msr.apic_base >> 32;
+                    cpu_log("APIC_BASE read : %08X%08X\n", EDX, EAX);
+                    break;
+                case 0x8b:
+                    break;
+                case 0x17a:
+                    if (cpu_s->cpu_type < CPU_ATHLON)
+                        goto amd_k_invalid_rdmsr;
+                    break;
+                case 0x17b:
+                    if (cpu_s->cpu_type < CPU_ATHLON)
+                        goto amd_k_invalid_rdmsr;
+                    EAX = msr.mcg_ctl & 0xffffffff;
+                    EDX = msr.mcg_ctl >> 32;
+                    break;
+                case 0x200:
+                case 0x201:
+                case 0x202:
+                case 0x203:
+                case 0x204:
+                case 0x205:
+                case 0x206:
+                case 0x207:
+                case 0x208:
+                case 0x209:
+                case 0x20a:
+                case 0x20b:
+                case 0x20c:
+                case 0x20d:
+                case 0x20e:
+                case 0x20f:
+                    if (cpu_s->cpu_type < CPU_ATHLON)
+                        goto amd_k_invalid_rdmsr;
+                    if (ECX & 1) {
+                        EAX = msr.mtrr_physmask[(ECX - 0x200) >> 1] & 0xffffffff;
+                        EDX = msr.mtrr_physmask[(ECX - 0x200) >> 1] >> 32;
+                    } else {
+                        EAX = msr.mtrr_physbase[(ECX - 0x200) >> 1] & 0xffffffff;
+                        EDX = msr.mtrr_physbase[(ECX - 0x200) >> 1] >> 32;
+                    }
+                    break;
+                case 0x250:
+                    if (cpu_s->cpu_type < CPU_ATHLON)
+                        goto amd_k_invalid_rdmsr;
+                    EAX = msr.mtrr_fix64k_8000 & 0xffffffff;
+                    EDX = msr.mtrr_fix64k_8000 >> 32;
+                    break;
+                case 0x258:
+                    if (cpu_s->cpu_type < CPU_ATHLON)
+                        goto amd_k_invalid_rdmsr;
+                    EAX = msr.mtrr_fix16k_8000 & 0xffffffff;
+                    EDX = msr.mtrr_fix16k_8000 >> 32;
+                    break;
+                case 0x259:
+                    if (cpu_s->cpu_type < CPU_ATHLON)
+                        goto amd_k_invalid_rdmsr;
+                    EAX = msr.mtrr_fix16k_a000 & 0xffffffff;
+                    EDX = msr.mtrr_fix16k_a000 >> 32;
+                    break;
+                case 0x268:
+                case 0x269:
+                case 0x26a:
+                case 0x26b:
+                case 0x26c:
+                case 0x26d:
+                case 0x26e:
+                case 0x26f:
+                    if (cpu_s->cpu_type < CPU_ATHLON)
+                        goto amd_k_invalid_rdmsr;
+                    EAX = msr.mtrr_fix4k[ECX - 0x268] & 0xffffffff;
+                    EDX = msr.mtrr_fix4k[ECX - 0x268] >> 32;
+                    break;
+                case 0x277:
+                    if (cpu_s->cpu_type < CPU_ATHLON)
+                        goto amd_k_invalid_rdmsr;
+                    EAX = msr.pat & 0xffffffff;
+                    EDX = msr.pat >> 32;
+                    break;
+                case 0x2ff:
+                    if (cpu_s->cpu_type < CPU_ATHLON)
+                        goto amd_k_invalid_rdmsr;
+                    EAX = msr.mtrr_deftype & 0xffffffff;
+                    EDX = msr.mtrr_deftype >> 32;
+                    break;
+                case 0x400:
+                case 0x404:
+                case 0x408:
+                case 0x40c:
+                case 0x410:
+                    if (cpu_s->cpu_type < CPU_ATHLON)
+                        goto amd_k_invalid_rdmsr;
+                    EAX = msr.mca_ctl[(ECX - 0x400) >> 2] & 0xffffffff;
+                    EDX = msr.mca_ctl[(ECX - 0x400) >> 2] >> 32;
+                    break;
+                case 0x401:
+                case 0x402:
+                case 0x405:
+                case 0x406:
+                case 0x407:
+                case 0x409:
+                case 0x40d:
+                case 0x40e:
+                case 0x411:
+                case 0x412:
+                    if (cpu_s->cpu_type < CPU_ATHLON)
+                        goto amd_k_invalid_rdmsr;
                     break;
                 /* Array Access Register */
                 case 0x00000082:
@@ -3011,6 +4026,90 @@ cpu_RDMSR(void)
 
                     EAX = msr.amd_l2aar & 0xffffffff;
                     EDX = msr.amd_l2aar >> 32;
+                    break;
+                case 0xc0010000 ... 0xc0010007:
+                    if (cpu_s->cpu_type < CPU_ATHLON)
+                        goto amd_k_invalid_rdmsr;
+                    break;
+                case 0xc0010010:
+                    if (cpu_s->cpu_type < CPU_ATHLON)
+                        goto amd_k_invalid_rdmsr;
+                    EAX = msr.amd_syscfg & 0xffffffff;
+                    EDX = msr.amd_syscfg >> 32;
+                    break;
+                case 0xc0010015:
+                    if (cpu_s->cpu_type < CPU_ATHLON)
+                        goto amd_k_invalid_rdmsr;
+                    EAX = msr.amd_hwcr_athlon & 0xffffffff;
+                    EDX = msr.amd_hwcr_athlon >> 32;
+                    break;
+                case 0xc0010016:
+                    if (cpu_s->cpu_type < CPU_ATHLON)
+                        goto amd_k_invalid_rdmsr;
+                    EAX = msr.amd_iorrbase1 & 0xffffffff;
+                    EDX = msr.amd_iorrbase1 >> 32;
+                    break;
+                case 0xc0010017:
+                    if (cpu_s->cpu_type < CPU_ATHLON)
+                        goto amd_k_invalid_rdmsr;
+                    EAX = msr.amd_iorrmask1 & 0xffffffff;
+                    EDX = msr.amd_iorrmask1 >> 32;
+                    break;
+                case 0xc0010018:
+                    if (cpu_s->cpu_type < CPU_ATHLON)
+                        goto amd_k_invalid_rdmsr;
+                    EAX = msr.amd_iorrbase2 & 0xffffffff;
+                    EDX = msr.amd_iorrbase2 >> 32;
+                    break;
+                case 0xc0010019:
+                    if (cpu_s->cpu_type < CPU_ATHLON)
+                        goto amd_k_invalid_rdmsr;
+                    EAX = msr.amd_iorrmask2 & 0xffffffff;
+                    EDX = msr.amd_iorrmask2 >> 32;
+                    break;
+                case 0xc001001a:
+                    if (cpu_s->cpu_type < CPU_ATHLON)
+                        goto amd_k_invalid_rdmsr;
+                    EAX = msr.amd_topmem & 0xffffffff;
+                    EDX = msr.amd_topmem >> 32;
+                    break;
+                case 0xc001001b:
+                    if (cpu_s->cpu_type < CPU_ATHLON)
+                        goto amd_k_invalid_rdmsr;
+                    EAX = msr.amd_clkctl & 0xffffffff;
+                    EDX = msr.amd_clkctl >> 32;
+                    break;
+                case 0xc001001c:
+                    if (cpu_s->cpu_type < CPU_ATHLON)
+                        goto amd_k_invalid_rdmsr;
+                    EAX = msr.ecxc001001c & 0xffffffff;
+                    EDX = msr.ecxc001001c >> 32;
+                    break;
+                case 0xc0010111:
+                    if (cpu_s->cpu_type < CPU_ATHLON)
+                        goto amd_k_invalid_rdmsr;
+                    EAX = msr.amd_smbase & 0xffffffff;
+                    EDX = 0;
+                    break;
+                case 0xc0010112:
+                    if (cpu_s->cpu_type < CPU_ATHLON)
+                        goto amd_k_invalid_rdmsr;
+                    EAX = msr.amd_smmaddr;
+                    EDX = 0;
+                    break;
+                case 0xc0010113:
+                    if (cpu_s->cpu_type < CPU_ATHLON)
+                        goto amd_k_invalid_rdmsr;
+                    EAX = msr.amd_smmmask;
+                    EDX = 0;
+                    break;
+                case 0xc0011000 ... 0xc001100c:
+                case 0xc0011010 ... 0xc0011014:
+                case 0xc0011020 ... 0xc0011028:
+                    if (cpu_s->cpu_type != CPU_ATHLON)
+                        goto amd_k_invalid_rdmsr;
+                    if(EDI != 0x9c5a203a)
+                        goto amd_k_invalid_rdmsr;
                     break;
                 default:
 amd_k_invalid_rdmsr:
@@ -3104,6 +4203,10 @@ amd_k_invalid_rdmsr:
                 case 0x80000010:
                     EAX = tsc & 0xffffffff;
                     EDX = tsc >> 32;
+#ifdef USE_DYNAREC
+                    if (cpu_use_dynarec)
+                        update_tsc();
+#endif
                     break;
                 /* Performance Monitor - Control and Event Select */
                 case 0x00000011:
@@ -3201,6 +4304,10 @@ pentium_invalid_rdmsr:
                 case 0x10:
                     EAX = tsc & 0xffffffff;
                     EDX = tsc >> 32;
+#ifdef USE_DYNAREC
+                    if (cpu_use_dynarec)
+                        update_tsc();
+#endif
                     break;
                 /* Performance Monitor - Control and Event Select */
                 case 0x11:
@@ -3223,10 +4330,14 @@ pentium_invalid_rdmsr:
         case CPU_PENTIUMPRO:
         case CPU_PENTIUM2:
         case CPU_PENTIUM2D:
+        case CPU_PENTIUM3:
+        case CPU_GENERICINTEL:
+        {
             EAX = EDX = 0;
             /* Per RichardG's probing of a real Deschutes using my RDMSR tool,
                we have discovered that the top 18 bits are filtered out. */
-            switch (ECX & 0x00003fff) {
+            uint32_t msr_index = (cpu_s->cpu_type < CPU_GENERICINTEL) ? ECX & 0x00003fff : ECX;
+            switch (msr_index) {
                 /* Machine Check Exception Address */
                 case 0x00:
                 /* Machine Check Exception Type */
@@ -3236,6 +4347,10 @@ pentium_invalid_rdmsr:
                 case 0x10:
                     EAX = tsc & 0xffffffff;
                     EDX = tsc >> 32;
+#ifdef USE_DYNAREC
+                    if (cpu_use_dynarec)
+                        update_tsc();
+#endif
                     break;
                 /* IA32_PLATFORM_ID - Platform ID */
                 case 0x17:
@@ -3254,7 +4369,7 @@ pentium_invalid_rdmsr:
                 case 0x1B:
                     EAX = msr.apic_base & 0xffffffff;
                     EDX = msr.apic_base >> 32;
-                    cpu_log("APIC_BASE read : %08X%08X\n", EDX, EAX);
+                    pclog("APIC_BASE read : %08X%08X\n", EDX, EAX);
                     break;
                 /* Unknown (undocumented?) MSR used by the Hyper-V BIOS */
                 case 0x20:
@@ -3270,7 +4385,11 @@ pentium_invalid_rdmsr:
                 case 0x2a:
                     EAX = 0xc4000000;
                     EDX = 0;
-                    if (cpu_dmulti == 2.5)
+                    if (cpu_dmulti == 1.5)
+                        EAX |= ((1 << 25) | (1 << 24) | (1 << 23) | (0 << 22));
+                    else if (cpu_dmulti == 2)
+                        EAX |= ((0 << 25) | (0 << 24) | (1 << 23) | (1 << 22));
+                    else if (cpu_dmulti == 2.5)
                         EAX |= ((0 << 25) | (1 << 24) | (1 << 23) | (1 << 22));
                     else if (cpu_dmulti == 3)
                         EAX |= ((0 << 25) | (0 << 24) | (0 << 23) | (1 << 22));
@@ -3294,11 +4413,37 @@ pentium_invalid_rdmsr:
                         EAX |= ((1 << 25) | (1 << 24) | (0 << 23) | (1 << 22));
                     else if (cpu_dmulti == 8)
                         EAX |= ((1 << 25) | (0 << 24) | (1 << 23) | (0 << 22));
+                    else if (cpu_dmulti == 8.5)
+                        EAX |= ((1 << 27) | (0 << 25) | (1 << 24) | (1 << 23) | (0 << 22));
+                    else if (cpu_dmulti == 9)
+                        EAX |= ((1 << 27) | (0 << 25) | (0 << 24) | (0 << 23) | (0 << 22));
+                    else if (cpu_dmulti == 9.5)
+                        EAX |= ((1 << 27) | (0 << 25) | (1 << 24) | (0 << 23) | (0 << 22));
+                    else if (cpu_dmulti == 10)
+                        EAX |= ((1 << 27) | (1 << 25) | (0 << 24) | (1 << 23) | (1 << 22));
+                    else if (cpu_dmulti == 10.5)
+                        EAX |= ((1 << 27) | (1 << 25) | (1 << 24) | (1 << 23) | (1 << 22));
+                    else if (cpu_dmulti == 11)
+                        EAX |= ((1 << 27) | (0 << 25) | (0 << 24) | (0 << 23) | (1 << 22));
+                    else if (cpu_dmulti == 11.5)
+                        EAX |= ((1 << 27) | (0 << 25) | (1 << 24) | (0 << 23) | (1 << 22));
+                    else if (cpu_dmulti == 12)
+                        EAX |= ((1 << 27) | (0 << 25) | (0 << 24) | (1 << 23) | (0 << 22));
+                    else if (cpu_dmulti == 13)
+                        EAX |= ((1 << 27) | (1 << 25) | (0 << 24) | (1 << 23) | (0 << 22));
+                    else if (cpu_dmulti == 14)
+                        EAX |= ((1 << 27) | (1 << 25) | (1 << 24) | (0 << 23) | (0 << 22));
+                    else if (cpu_dmulti == 15)
+                        EAX |= ((1 << 27) | (1 << 25) | (1 << 24) | (1 << 23) | (0 << 22));
+                    else if (cpu_dmulti == 16)
+                        EAX |= ((1 << 27) | (0 << 25) | (0 << 24) | (1 << 23) | (1 << 22));
                     else
-                        EAX |= ((0 << 25) | (1 << 24) | (1 << 23) | (1 << 22));
+                        EAX |= ((1 << 25) | (1 << 24) | (1 << 23) | (0 << 22));
                     if (cpu_s->cpu_type != CPU_PENTIUMPRO) {
                         if (cpu_busspeed >= 84000000)
                             EAX |= (1 << 19);
+                        else if (cpu_busspeed >= 112000000)
+                            EAX |= (1 << 18);
                     }
                     break;
                 /* Unknown */
@@ -3415,6 +4560,24 @@ pentium_invalid_rdmsr:
                     EAX = msr.evntsel[ECX - 0x186] & 0xffffffff;
                     EDX = msr.evntsel[ECX - 0x186] >> 32;
                     break;
+//#if 0
+                case 0x198:
+                    EAX = msr.ecx198 & 0xffffffff;
+                    EDX = msr.ecx198 >> 32;
+                    break;
+                case 0x19a:
+                    EAX = msr.ecx19a & 0xffffffff;
+                    EDX = msr.ecx19a >> 32;
+                    break;
+                case 0x19d:
+                    EAX = msr.ecx19d & 0xffffffff;
+                    EDX = msr.ecx19d >> 32;
+                    break;
+                case 0x1a0:
+                    EAX = msr.ecx1a0 & 0xffffffff;
+                    EDX = msr.ecx1a0 >> 32;
+                    break;
+//#endif
                 /* Unknown */
                 case 0x1d3:
                     break;
@@ -3528,6 +4691,21 @@ pentium_invalid_rdmsr:
                 case 0x2000:
                 case 0x2002 ... 0x2004:
                     break;
+                /* Extended Feature Enable Register */
+                case 0xc0000080:
+                    if (cpu_s->cpu_type < CPU_GENERICINTEL)
+                        goto i686_invalid_rdmsr;
+                    EAX = msr.amd_efer & 0xffffffff;
+                    EDX = msr.amd_efer >> 32;
+                    break;
+                /* SYSCALL Target Address Register */
+                case 0xc0000081:
+                    if (cpu_s->cpu_type < CPU_GENERICINTEL)
+                        goto i686_invalid_rdmsr;
+
+                    EAX = msr.amd_star & 0xffffffff;
+                    EDX = msr.amd_star >> 32;
+                    break;
                 default:
 i686_invalid_rdmsr:
                     cpu_log("RDMSR: Invalid MSR: %08X\n", ECX);
@@ -3535,6 +4713,249 @@ i686_invalid_rdmsr:
                     break;
             }
             break;
+            }
+
+        case CPU_PENTIUM4W:
+        {
+            EAX = EDX = 0;
+            switch(ECX)
+            {
+                /* Machine Check Exception Address */
+                case 0x00:
+                /* Machine Check Exception Type */
+                case 0x01:
+                    break;
+                /* Time Stamp Counter */
+                case 0x10:
+                    EAX = tsc & 0xffffffff;
+                    EDX = tsc >> 32;
+#ifdef USE_DYNAREC
+                    if (cpu_use_dynarec)
+                        update_tsc();
+#endif
+                    break;
+                case 0x17:
+                /* Unknown */
+                case 0x18:
+                    break;
+                /* IA32_APIC_BASE - APIC Base Address */
+                case 0x1B:
+                    EAX = msr.apic_base & 0xffffffff;
+                    EDX = msr.apic_base >> 32;
+                    pclog("APIC_BASE read : %08X%08X\n", EDX, EAX);
+                    break;
+                /* Unknown (undocumented?) MSR used by the Hyper-V BIOS */
+                case 0x20:
+                    EAX = msr.ecx20 & 0xffffffff;
+                    EDX = msr.ecx20 >> 32;
+                    break;
+                /* EBL_CR_POWERON - Processor Hard Power-On Configuration */
+                case 0x2a:
+                    EAX = 0xc4000000;
+                    EDX = 0;
+                    break;
+                /* BIOS_UPDT_TRIG - BIOS Update Trigger */
+                case 0x79:
+                    EAX = msr.bios_updt & 0xffffffff;
+                    EDX = msr.bios_updt >> 32;
+                    break;
+                /* BBL_CR_D0 ... BBL_CR_D3 - Chunk 0..3 Data Register
+                   8Bh: BIOS_SIGN - BIOS Update Signature */
+                case 0x88 ... 0x8b:
+                    EAX = msr.bbl_cr_dx[ECX - 0x88] & 0xffffffff;
+                    EDX = msr.bbl_cr_dx[ECX - 0x88] >> 32;
+                    break;
+                /* Unknown */
+                case 0xae:
+                    break;
+                /* PERFCTR0 - Performance Counter Register 0 */
+                case 0xc1:
+                /* PERFCTR1 - Performance Counter Register 1 */
+                case 0xc2:
+                    EAX = msr.perfctr[ECX - 0xC1] & 0xffffffff;
+                    EDX = msr.perfctr[ECX - 0xC1] >> 32;
+                    break;
+                /* MTRRcap */
+                case 0xfe:
+                    EAX = msr.mtrr_cap & 0xffffffff;
+                    EDX = msr.mtrr_cap >> 32;
+                    break;
+                /* BBL_CR_ADDR - L2 Cache Address Register */
+                case 0x116:
+                    EAX = msr.bbl_cr_addr & 0xffffffff;
+                    EDX = msr.bbl_cr_addr >> 32;
+                    break;
+                /* BBL_CR_DECC - L2 Cache Date ECC Register */
+                case 0x118:
+                    EAX = msr.bbl_cr_decc & 0xffffffff;
+                    EDX = msr.bbl_cr_decc >> 32;
+                    break;
+                /* BBL_CR_CTL - L2 Cache Control Register */
+                case 0x119:
+                    EAX = msr.bbl_cr_ctl & 0xffffffff;
+                    EDX = msr.bbl_cr_ctl >> 32;
+                    break;
+                /* BBL_CR_TRIG - L2 Cache Trigger Register */
+                case 0x11a:
+                    EAX = msr.bbl_cr_trig & 0xffffffff;
+                    EDX = msr.bbl_cr_trig >> 32;
+                    break;
+                /* BBL_CR_BUSY - L2 Cache Busy Register */
+                case 0x11b:
+                    EAX = msr.bbl_cr_busy & 0xffffffff;
+                    EDX = msr.bbl_cr_busy >> 32;
+                    break;
+                /* BBL_CR_CTL3 - L2 Cache Control Register 3 */
+                case 0x11e:
+                    EAX = msr.bbl_cr_ctl3 & 0xffffffff;
+                    EDX = msr.bbl_cr_ctl3 >> 32;
+                    break;
+                /* Unknown */
+                case 0x131:
+                case 0x14e ... 0x151:
+                case 0x154:
+                case 0x15b:
+                case 0x15f:
+                    break;
+                /* SYSENTER_CS - SYSENTER target CS */
+                case 0x174:
+                    EAX &= 0xffff0000;
+                    EAX |= msr.sysenter_cs;
+                    EDX = 0x00000000;
+                    break;
+                /* SYSENTER_ESP - SYSENTER target ESP */
+                case 0x175:
+                    EAX = msr.sysenter_esp;
+                    EDX = 0x00000000;
+                    break;
+                /* SYSENTER_EIP - SYSENTER target EIP */
+                case 0x176:
+                    EAX = msr.sysenter_eip;
+                    EDX = 0x00000000;
+                    break;
+                /* MCG_CAP - Machine Check Global Capability */
+                case 0x179:
+                    EAX = 0x00000105;
+                    EDX = 0x00000000;
+                    break;
+                /* MCG_STATUS - Machine Check Global Status */
+                case 0x17a:
+                    break;
+                /* MCG_CTL - Machine Check Global Control */
+                case 0x17b:
+                    EAX = msr.mcg_ctl & 0xffffffff;
+                    EDX = msr.mcg_ctl >> 32;
+                    break;
+                /* EVNTSEL0 - Performance Counter Event Select 0 */
+                case 0x186:
+                /* EVNTSEL1 - Performance Counter Event Select 1 */
+                case 0x187:
+                    EAX = msr.evntsel[ECX - 0x186] & 0xffffffff;
+                    EDX = msr.evntsel[ECX - 0x186] >> 32;
+                    break;
+                case 0x198:
+                    EAX = msr.ecx198 & 0xffffffff;
+                    EDX = msr.ecx198 >> 32;
+                    break;
+                case 0x19a:
+                    EAX = msr.ecx19a & 0xffffffff;
+                    EDX = msr.ecx19a >> 32;
+                    break;
+                case 0x19d:
+                    EAX = msr.ecx19d & 0xffffffff;
+                    EDX = msr.ecx19d >> 32;
+                    break;
+                case 0x1a0:
+                    EAX = msr.ecx1a0 & 0xffffffff;
+                    EDX = msr.ecx1a0 >> 32;
+                    break;
+                /* DEBUGCTLMSR - Debugging Control Register */
+                case 0x1d9:
+                    EAX = msr.debug_ctl;
+                    break;
+                /* ECX & 0: MTRRphysBase0 ... MTRRphysBase7
+                   ECX & 1: MTRRphysMask0 ... MTRRphysMask7 */
+                case 0x200 ... 0x20f:
+                    if (ECX & 1) {
+                        EAX = msr.mtrr_physmask[(ECX - 0x200) >> 1] & 0xffffffff;
+                        EDX = msr.mtrr_physmask[(ECX - 0x200) >> 1] >> 32;
+                    } else {
+                        EAX = msr.mtrr_physbase[(ECX - 0x200) >> 1] & 0xffffffff;
+                        EDX = msr.mtrr_physbase[(ECX - 0x200) >> 1] >> 32;
+                    }
+                    break;
+                /* MTRRfix64K_00000 */
+                case 0x250:
+                    EAX = msr.mtrr_fix64k_8000 & 0xffffffff;
+                    EDX = msr.mtrr_fix64k_8000 >> 32;
+                    break;
+                /* MTRRfix16K_80000 */
+                case 0x258:
+                    EAX = msr.mtrr_fix16k_8000 & 0xffffffff;
+                    EDX = msr.mtrr_fix16k_8000 >> 32;
+                    break;
+                /* MTRRfix16K_A0000 */
+                case 0x259:
+                    EAX = msr.mtrr_fix16k_a000 & 0xffffffff;
+                    EDX = msr.mtrr_fix16k_a000 >> 32;
+                    break;
+                /* MTRRfix4K_C0000 ... MTRRfix4K_F8000 */
+                case 0x268 ... 0x26f:
+                    EAX = msr.mtrr_fix4k[ECX - 0x268] & 0xffffffff;
+                    EDX = msr.mtrr_fix4k[ECX - 0x268] >> 32;
+                    break;
+                /* Page Attribute Table */
+                case 0x277:
+                    EAX = msr.pat & 0xffffffff;
+                    EDX = msr.pat >> 32;
+                    break;
+                /* MTRRdefType */
+                case 0x2ff:
+                    EAX = msr.mtrr_deftype & 0xffffffff;
+                    EDX = msr.mtrr_deftype >> 32;
+                    break;
+                /* MC0_CTL - Machine Check 0 Control */
+                case 0x400:
+                /* MC1_CTL - Machine Check 1 Control */
+                case 0x404:
+                /* MC2_CTL - Machine Check 2 Control */
+                case 0x408:
+                /* MC4_CTL - Machine Check 4 Control */
+                case 0x40c:
+                /* MC3_CTL - Machine Check 3 Control */
+                case 0x410:
+                    EAX = msr.mca_ctl[(ECX - 0x400) >> 2] & 0xffffffff;
+                    EDX = msr.mca_ctl[(ECX - 0x400) >> 2] >> 32;
+                    break;
+                /* MC0_STATUS - Machine Check 0 Status */
+                case 0x401:
+                /* MC0_ADDR - Machine Check 0 Address */
+                case 0x402:
+                /* MC1_STATUS - Machine Check 1 Status */
+                case 0x405:
+                /* MC1_ADDR - Machine Check 1 Address */
+                case 0x406:
+                /* MC2_STATUS - Machine Check 2 Status */
+                case 0x409:
+                /* MC2_ADDR - Machine Check 2 Address */
+                case 0x40a:
+                /* MC4_STATUS - Machine Check 4 Status */
+                case 0x40d:
+                /* MC4_ADDR - Machine Check 4 Address */
+                case 0x40e:
+                /* MC3_STATUS - Machine Check 3 Status */
+                case 0x411:
+                /* MC3_ADDR - Machine Check 3 Address */
+                case 0x412:
+                    break;
+                default:
+p4w_invalid_rdmsr:
+                    cpu_log("RDMSR: Invalid MSR: %08X\n", ECX);
+                    x86gpf(NULL, 0);
+                    break;
+            }
+            break;
+        }
     }
 
     cpu_log("RDMSR %08X %08X%08X\n", ECX, EDX, EAX);
@@ -3544,6 +4965,7 @@ void
 cpu_WRMSR(void)
 {
     uint64_t temp;
+    uint64_t temp2;
 
     cpu_log("WRMSR %08X %08X%08X\n", ECX, EDX, EAX);
 
@@ -3657,6 +5079,7 @@ cpu_WRMSR(void)
             break;
 
         case CPU_CYRIX3S:
+        case CPU_CYRIX3N:
             switch (ECX) {
                 /* Machine Check Exception Address */
                 case 0x00:
@@ -3703,13 +5126,47 @@ cpu_WRMSR(void)
                 case 0x1109:
                     msr.fcr3 = EAX | ((uint64_t) EDX << 32);
                     break;
+                /* LongHaul/PowerSaver */
+                case 0x110a:
+                    if (CPUID < 0x670)
+                        x86gpf(NULL, 0);
+                    else
+                        msr.longhaul = EAX & 0x31ff47f0;
+                    break;
+                /* PadLock */
+                case 0x110b:
+                    if (cpu_s->cpu_type < CPU_CYRIX3N)
+                        x86gpf(NULL, 0);
+                    else
+                        msr.padlock_rng = EAX & 0x3ffc40;
+                    break;
+                /* Bus Control Register 2 */
+                case 0x1147:
+                    if (cpu_s->cpu_type >= CPU_CYRIX3N)
+                        x86gpf(NULL, 0);
+                    else
+                        msr.bcr2 = EAX;
+                    break;
                 /* ECX & 0: MTRRphysBase0 ... MTRRphysBase7
                    ECX & 1: MTRRphysMask0 ... MTRRphysMask7 */
                 case 0x200 ... 0x20f:
-                    if (ECX & 1)
-                        msr.mtrr_physmask[(ECX - 0x200) >> 1] = EAX | ((uint64_t) EDX << 32);
-                    else
-                        msr.mtrr_physbase[(ECX - 0x200) >> 1] = EAX | ((uint64_t) EDX << 32);
+                    temp  = EAX | ((uint64_t) EDX << 32);
+                    temp2 = (ECX - 0x200) >> 1;
+                    if (ECX & 1) {
+                        cpu_log("MTRR physmask[%d] = %08llx\n", temp2, temp);
+
+                        if ((msr.mtrr_physmask[temp2] >> 11) & 0x1)
+                            mem_del_mtrr(msr.mtrr_physbase[temp2] & ~(0xFFF), msr.mtrr_physmask[temp2] & ~(0xFFF));
+
+                        if ((temp >> 11) & 0x1)
+                            mem_add_mtrr(msr.mtrr_physbase[temp2] & ~(0xFFF), temp & ~(0xFFF), msr.mtrr_physbase[temp2] & 0xFF);
+
+                        msr.mtrr_physmask[temp2] = temp;
+                    } else {
+                        cpu_log("MTRR physbase[%d] = %08llx\n", temp2, temp);
+
+                        msr.mtrr_physbase[temp2] = temp;
+                    }
                     break;
                 /* MTRRfix64K_00000 */
                 case 0x250:
@@ -3744,6 +5201,7 @@ cpu_WRMSR(void)
         case CPU_K6_3:
         case CPU_K6_2P:
         case CPU_K6_3P:
+        case CPU_ATHLON:
             switch (ECX) {
                 /* Machine Check Address Register */
                 case 0x00000000:
@@ -3762,6 +5220,137 @@ cpu_WRMSR(void)
                 /* Time Stamp Counter */
                 case 0x00000010:
                     timer_set_new_tsc(EAX | ((uint64_t) EDX << 32));
+                    break;
+                case 0x1b:
+                    cpu_log("APIC_BASE write: %08X%08X\n", EDX, EAX);
+                    
+                    if (current_lapic) {
+                        uint8_t disabled = (!(msr.apic_base & (1 << 11)));
+                        
+                        msr.apic_base = EAX | ((uint64_t) EDX << 32);
+                        if (disabled) msr.apic_base &= ~(1 << 11);
+                        if (EDX) {
+                            fatal("LAPIC-on-PAE not implemented!");
+                        }
+                        apic_lapic_set_base(msr.apic_base & 0xFFFFFFFF);
+                    }
+                    
+                    msr.apic_base = EAX | ((uint64_t) EDX << 32);
+                    break;
+                case 0x8b:
+                    break;
+                case 0xfe:
+                    if (cpu_s->cpu_type != CPU_ATHLON)
+                        goto amd_k_invalid_wrmsr;
+                    msr.mtrr_cap = EAX | ((uint64_t) EDX << 32);
+                    break;
+                case 0x179:
+                    if (cpu_s->cpu_type != CPU_ATHLON)
+                        goto amd_k_invalid_wrmsr;
+                    break;
+                case 0x17a:
+                    if (cpu_s->cpu_type != CPU_ATHLON)
+                        goto amd_k_invalid_wrmsr;
+                    if (EAX || EDX)
+                        x86gpf(NULL, 0);
+                    break;
+                case 0x17b:
+                    if (cpu_s->cpu_type != CPU_ATHLON)
+                        goto amd_k_invalid_wrmsr;
+                    msr.mcg_ctl = EAX | ((uint64_t) EDX << 32);
+                    break;
+                case 0x200:
+                case 0x201:
+                case 0x202:
+                case 0x203:
+                case 0x204:
+                case 0x205:
+                case 0x206:
+                case 0x207:
+                case 0x208:
+                case 0x209:
+                case 0x20a:
+                case 0x20b:
+                case 0x20c:
+                case 0x20d:
+                case 0x20e:
+                case 0x20f:
+                    if (cpu_s->cpu_type != CPU_ATHLON)
+                        goto amd_k_invalid_wrmsr;
+                    temp  = EAX | ((uint64_t) EDX << 32);
+                    temp2 = (ECX - 0x200) >> 1;
+                    if (ECX & 1) {
+                        cpu_log("MTRR physmask[%d] = %08llx\n", temp2, temp);
+
+                        if ((msr.mtrr_physmask[temp2] >> 11) & 0x1)
+                            mem_del_mtrr(msr.mtrr_physbase[temp2] & ~(0xFFF), msr.mtrr_physmask[temp2] & ~(0xFFF));
+
+                        if ((temp >> 11) & 0x1)
+                            mem_add_mtrr(msr.mtrr_physbase[temp2] & ~(0xFFF), temp & ~(0xFFF), msr.mtrr_physbase[temp2] & 0xFF);
+
+                        msr.mtrr_physmask[temp2] = temp;
+                    } else {
+                        cpu_log("MTRR physbase[%d] = %08llx\n", temp2, temp);
+
+                        msr.mtrr_physbase[temp2] = temp;
+                    }
+                    break;
+                case 0x250:
+                    if (cpu_s->cpu_type != CPU_ATHLON)
+                        goto amd_k_invalid_wrmsr;
+                    msr.mtrr_fix64k_8000 = EAX | ((uint64_t) EDX << 32);
+                    break;
+                case 0x258:
+                    if (cpu_s->cpu_type != CPU_ATHLON)
+                        goto amd_k_invalid_wrmsr;
+                    msr.mtrr_fix16k_8000 = EAX | ((uint64_t) EDX << 32);
+                    break;
+                case 0x259:
+                    if (cpu_s->cpu_type != CPU_ATHLON)
+                        goto amd_k_invalid_wrmsr;
+                    msr.mtrr_fix16k_a000 = EAX | ((uint64_t) EDX << 32);
+                    break;
+                case 0x268:
+                case 0x269:
+                case 0x26a:
+                case 0x26b:
+                case 0x26c:
+                case 0x26d:
+                case 0x26e:
+                case 0x26f:
+                    if (cpu_s->cpu_type != CPU_ATHLON)
+                        goto amd_k_invalid_wrmsr;
+                    msr.mtrr_fix4k[ECX - 0x268] = EAX | ((uint64_t) EDX << 32);
+                    break;
+                case 0x277:
+                    msr.pat = EAX | ((uint64_t) EDX << 32);
+                    break;
+                case 0x2ff:
+                    msr.mtrr_deftype = EAX | ((uint64_t) EDX << 32);
+                    break;
+                case 0x400:
+                case 0x404:
+                case 0x408:
+                case 0x40c:
+                case 0x410:
+                    if (cpu_s->cpu_type < CPU_ATHLON)
+                        goto amd_k_invalid_wrmsr;
+                    msr.mca_ctl[(ECX - 0x400) >> 2] = EAX | ((uint64_t) EDX << 32);
+                    break;
+                case 0x401:
+                case 0x402:
+                case 0x405:
+                case 0x406:
+                case 0x407:
+                case 0x409:
+                case 0x40d:
+                case 0x40e:
+                case 0x411:
+                case 0x412:
+                    if (cpu_s->cpu_type < CPU_ATHLON)
+                        goto amd_k_invalid_wrmsr;
+                    if (EAX || EDX)
+                        x86gpf(NULL, 0);
                     break;
                 /* Array Access Register */
                 case 0x00000082:
@@ -3838,6 +5427,89 @@ cpu_WRMSR(void)
                         goto amd_k_invalid_wrmsr;
 
                     msr.amd_l2aar = EAX | ((uint64_t) EDX << 32);
+                    break;
+                case 0xc0010000 ... 0xc0010007:
+                    if (cpu_s->cpu_type < CPU_ATHLON)
+                        goto amd_k_invalid_wrmsr;
+                    break;
+                case 0xc0010010:
+                    if (cpu_s->cpu_type < CPU_ATHLON)
+                        goto amd_k_invalid_wrmsr;
+                    msr.amd_syscfg = EAX | ((uint64_t) EDX << 32);
+                    break;
+                case 0xc0010015:
+                    if (cpu_s->cpu_type < CPU_ATHLON)
+                        goto amd_k_invalid_wrmsr;
+                    msr.amd_hwcr_athlon = EAX | ((uint64_t) EDX << 32);
+                    break;
+                case 0xc0010016:
+                    if (cpu_s->cpu_type < CPU_ATHLON)
+                        goto amd_k_invalid_wrmsr;
+                    msr.amd_iorrbase1 = EAX | ((uint64_t) EDX << 32);
+                    break;
+                case 0xc0010017:
+                    if (cpu_s->cpu_type < CPU_ATHLON)
+                        goto amd_k_invalid_wrmsr;
+                    msr.amd_iorrmask1 = EAX | ((uint64_t) EDX << 32);
+                    break;
+                case 0xc0010018:
+                    if (cpu_s->cpu_type < CPU_ATHLON)
+                        goto amd_k_invalid_wrmsr;
+                    msr.amd_iorrbase2 = EAX | ((uint64_t) EDX << 32);
+                    break;
+                case 0xc0010019:
+                    if (cpu_s->cpu_type < CPU_ATHLON)
+                        goto amd_k_invalid_wrmsr;
+                    msr.amd_iorrmask2 = EAX | ((uint64_t) EDX << 32);
+                    break;
+                case 0xc001001a:
+                    if (cpu_s->cpu_type < CPU_ATHLON)
+                        goto amd_k_invalid_wrmsr;
+                    msr.amd_topmem = EAX | ((uint64_t) EDX << 32);
+                    break;
+                case 0xc001001b:
+                    if (cpu_s->cpu_type < CPU_ATHLON)
+                        goto amd_k_invalid_wrmsr;
+                    msr.amd_clkctl = EAX | ((uint64_t) EDX << 32);
+                    break;
+                case 0xc001001c:
+                    if (cpu_s->cpu_type < CPU_ATHLON)
+                        goto amd_k_invalid_wrmsr;
+                    msr.ecxc001001c = EAX | ((uint64_t) EDX << 32);
+                    break;
+                case 0xc0010020:
+                    break;
+                case 0xc0010111:
+                    if (cpu_s->cpu_type < CPU_ATHLON)
+                        goto amd_k_invalid_wrmsr;
+                    smram_disable(amd_k7_smram_aseg);
+                    msr.amd_smbase = EAX | ((uint64_t) EDX << 32);
+                    smram_enable(amd_k7_smram_aseg, msr.amd_smbase, msr.amd_smbase, 0x10000, 0, 1);
+                    flushmmucache();
+                    break;
+                case 0xc0010112:
+                    if (cpu_s->cpu_type < CPU_ATHLON)
+                        goto amd_k_invalid_wrmsr;
+                    smram_disable(amd_k7_smram_tseg);
+                    msr.amd_smmaddr = EAX | ((uint64_t) EDX << 32);
+                    smram_enable(amd_k7_smram_tseg, msr.amd_smmaddr, msr.amd_smmaddr, msr.amd_smmmask + 1, 0, 1);
+                    flushmmucache();
+                    break;
+                case 0xc0010113:
+                    if (cpu_s->cpu_type < CPU_ATHLON)
+                        goto amd_k_invalid_wrmsr;
+                    smram_disable(amd_k7_smram_tseg);
+                    msr.amd_smmmask = EAX | ((uint64_t) EDX << 32);
+                    smram_enable(amd_k7_smram_tseg, msr.amd_smmaddr, msr.amd_smmaddr, msr.amd_smmmask + 1, 0, 1);
+                    flushmmucache();
+                    break;
+                case 0xc0011000 ... 0xc001100c:
+                case 0xc0011010 ... 0xc0011014:
+                case 0xc0011020 ... 0xc0011028:
+                    if (cpu_s->cpu_type != CPU_ATHLON)
+                        goto amd_k_invalid_wrmsr;
+                    if(EDI != 0x9c5a203a)
+                        goto amd_k_invalid_wrmsr;
                     break;
                 default:
 amd_k_invalid_wrmsr:
@@ -4038,9 +5710,13 @@ pentium_invalid_wrmsr:
         case CPU_PENTIUMPRO:
         case CPU_PENTIUM2:
         case CPU_PENTIUM2D:
+        case CPU_PENTIUM3:
+        case CPU_GENERICINTEL:
+        {
             /* Per RichardG's probing of a real Deschutes using my RDMSR tool,
                we have discovered that the top 18 bits are filtered out. */
-            switch (ECX & 0x00003fff) {
+            uint32_t msr_index = (cpu_s->cpu_type < CPU_GENERICINTEL) ? ECX & 0x00003fff : ECX;
+            switch (msr_index) {
                 /* Machine Check Exception Address */
                 case 0x00:
                 /* Machine Check Exception Type */
@@ -4057,10 +5733,17 @@ pentium_invalid_wrmsr:
                     break;
                 /* IA32_APIC_BASE - APIC Base Address */
                 case 0x1b:
-                    cpu_log("APIC_BASE write: %08X%08X\n", EDX, EAX);
-#if 0
-                    msr.apic_base = EAX | ((uint64_t) EDX << 32);
-#endif
+                    pclog("APIC_BASE write: %08X%08X\n", EDX, EAX);
+                    
+                    if (current_lapic) {
+                        uint8_t disabled = (!(msr.apic_base & (1 << 11)));
+                        
+                        msr.apic_base = EAX | ((uint64_t) EDX << 32);
+                        if (disabled) msr.apic_base &= ~(1 << 11);
+                        apic_lapic_set_base(msr.apic_base & 0xFFFFFFFFull);
+                    }
+                    
+                    // msr.apic_base = EAX | ((uint64_t) EDX << 32);
                     break;
                 /* Unknown (undocumented?) MSR used by the Hyper-V BIOS */
                 case 0x20:
@@ -4078,6 +5761,290 @@ pentium_invalid_wrmsr:
                 case 0x32:
                     if (cpu_s->cpu_type == CPU_PENTIUMPRO)
                         goto i686_invalid_wrmsr;
+                    break;
+                /* TEST_CTL - Test Control Register */
+                case 0x33:
+                    msr.test_ctl = EAX;
+                    break;
+                /* Unknown */
+                case 0x34:
+                case 0x3a:
+                case 0x3b:
+                case 0x50 ... 0x54:
+                    break;
+                /* BIOS_UPDT_TRIG - BIOS Update Trigger */
+                case 0x79:
+                    msr.bios_updt = EAX | ((uint64_t) EDX << 32);
+                    break;
+                /* BBL_CR_D0 ... BBL_CR_D3 - Chunk 0..3 Data Register
+                   8Bh: BIOS_SIGN - BIOS Update Signature */
+                case 0x88 ... 0x8b:
+                    msr.bbl_cr_dx[ECX - 0x88] = EAX | ((uint64_t) EDX << 32);
+                    break;
+                /* Unknown */
+                case 0xae:
+                    break;
+                /* PERFCTR0 - Performance Counter Register 0 */
+                case 0xc1:
+                /* PERFCTR1 - Performance Counter Register 1 */
+                case 0xc2:
+                    msr.perfctr[ECX - 0xC1] = EAX | ((uint64_t) EDX << 32);
+                    break;
+                /* MTRRcap */
+                case 0xfe:
+                    msr.mtrr_cap = EAX | ((uint64_t) EDX << 32);
+                    break;
+                /* BBL_CR_ADDR - L2 Cache Address Register */
+                case 0x116:
+                    msr.bbl_cr_addr = EAX | ((uint64_t) EDX << 32);
+                    break;
+                /* BBL_CR_DECC - L2 Cache Date ECC Register */
+                case 0x118:
+                    msr.bbl_cr_decc = EAX | ((uint64_t) EDX << 32);
+                    break;
+                /* BBL_CR_CTL - L2 Cache Control Register */
+                case 0x119:
+                    msr.bbl_cr_ctl = EAX | ((uint64_t) EDX << 32);
+                    /* Preserve the PSN disable bit. */
+                    if (((cpu_s->cpu_type == CPU_PENTIUM3) && (CPUID < 0x6b0) && (msr.bbl_cr_ctl & (1 << 21))))
+                        msr.bbl_cr_ctl = (1 << 21) | EAX | ((uint64_t) EDX << 32);
+                    else
+                        msr.bbl_cr_ctl = EAX | ((uint64_t) EDX << 32);
+                    break;
+                /* BBL_CR_TRIG - L2 Cache Trigger Register */
+                case 0x11a:
+                    msr.bbl_cr_trig = EAX | ((uint64_t) EDX << 32);
+                    break;
+                /* BBL_CR_BUSY - L2 Cache Busy Register */
+                case 0x11b:
+                    msr.bbl_cr_busy = EAX | ((uint64_t) EDX << 32);
+                    break;
+                /* BBL_CR_CTL3 - L2 Cache Control Register 3 */
+                case 0x11e:
+                    msr.bbl_cr_ctl3 = (msr.bbl_cr_ctl3 & 0x02f00000) | (EAX & ~0x02f00000) | ((uint64_t) EDX << 32);
+                    break;
+                /* Unknown */
+                case 0x131:
+                case 0x14e ... 0x151:
+                case 0x154:
+                case 0x15b:
+                case 0x15f:
+                    break;
+                /* SYSENTER_CS - SYSENTER target CS */
+                case 0x174:
+                    msr.sysenter_cs = EAX & 0xFFFF;
+                    break;
+                /* SYSENTER_ESP - SYSENTER target ESP */
+                case 0x175:
+                    msr.sysenter_esp = EAX;
+                    break;
+                /* SYSENTER_EIP - SYSENTER target EIP */
+                case 0x176:
+                    msr.sysenter_eip = EAX;
+                    break;
+                /* MCG_CAP - Machine Check Global Capability */
+                case 0x179:
+                    break;
+                /* MCG_STATUS - Machine Check Global Status */
+                case 0x17a:
+                    if (EAX || EDX)
+                        x86gpf(NULL, 0);
+                    break;
+                /* MCG_CTL - Machine Check Global Control */
+                case 0x17b:
+                    msr.mcg_ctl = EAX | ((uint64_t) EDX << 32);
+                    break;
+                /* EVNTSEL0 - Performance Counter Event Select 0 */
+                case 0x186:
+                /* EVNTSEL1 - Performance Counter Event Select 1 */
+                case 0x187:
+                    msr.evntsel[ECX - 0x186] = EAX | ((uint64_t) EDX << 32);
+                    break;
+//#if 0
+                case 0x198:
+                    msr.ecx198 = EAX | ((uint64_t) EDX << 32);
+                    break;
+                case 0x19a:
+                    msr.ecx19a = EAX | ((uint64_t) EDX << 32);
+                    break;
+                case 0x19d:
+                    msr.ecx19d = EAX | ((uint64_t) EDX << 32);
+                    break;
+                case 0x1a0:
+                    msr.ecx1a0 = EAX | ((uint64_t) EDX << 32);
+                    break;
+//#endif
+                case 0x1d3:
+                    break;
+                /* DEBUGCTLMSR - Debugging Control Register */
+                case 0x1d9:
+                    msr.debug_ctl = EAX;
+                    break;
+                /* ROB_CR_BKUPTMPDR6 */
+                case 0x1e0:
+                    msr.rob_cr_bkuptmpdr6 = EAX;
+                    break;
+                /* ECX & 0: MTRRphysBase0 ... MTRRphysBase7
+                   ECX & 1: MTRRphysMask0 ... MTRRphysMask7 */
+                case 0x200 ... 0x20f:
+                    temp  = EAX | ((uint64_t) EDX << 32);
+                    temp2 = (ECX - 0x200) >> 1;
+                    if (ECX & 1) {
+                        cpu_log("MTRR physmask[%d] = %08llx\n", temp2, temp);
+
+                        if ((msr.mtrr_physmask[temp2] >> 11) & 0x1)
+                            mem_del_mtrr(msr.mtrr_physbase[temp2] & ~(0xFFF), msr.mtrr_physmask[temp2] & ~(0xFFF));
+
+                        if ((temp >> 11) & 0x1)
+                            mem_add_mtrr(msr.mtrr_physbase[temp2] & ~(0xFFF), temp & ~(0xFFF), msr.mtrr_physbase[temp2] & 0xFF);
+
+                        msr.mtrr_physmask[temp2] = temp;
+                    } else {
+                        cpu_log("MTRR physbase[%d] = %08llx\n", temp2, temp);
+
+                        msr.mtrr_physbase[temp2] = temp;
+                    }
+                    break;
+                /* MTRRfix64K_00000 */
+                case 0x250:
+                    msr.mtrr_fix64k_8000 = EAX | ((uint64_t) EDX << 32);
+                    break;
+                /* MTRRfix16K_80000 */
+                case 0x258:
+                    msr.mtrr_fix16k_8000 = EAX | ((uint64_t) EDX << 32);
+                    break;
+                /* MTRRfix16K_A0000 */
+                case 0x259:
+                    msr.mtrr_fix16k_a000 = EAX | ((uint64_t) EDX << 32);
+                    break;
+                /* MTRRfix4K_C0000 ... MTRRfix4K_F8000 */
+                case 0x268 ... 0x26f:
+                    msr.mtrr_fix4k[ECX - 0x268] = EAX | ((uint64_t) EDX << 32);
+                    break;
+                /* Page Attribute Table */
+                case 0x277:
+                    if (cpu_s->cpu_type < CPU_PENTIUM2D)
+                        goto i686_invalid_wrmsr;
+                    msr.pat = EAX | ((uint64_t) EDX << 32);
+                    break;
+                /* Unknown */
+                case 0x280:
+                    if (cpu_s->cpu_type == CPU_PENTIUMPRO)
+                        goto i686_invalid_wrmsr;
+                    break;
+                /* MTRRdefType */
+                case 0x2ff:
+                    msr.mtrr_deftype = EAX | ((uint64_t) EDX << 32);
+                    break;
+                /* MC0_CTL - Machine Check 0 Control */
+                case 0x400:
+                /* MC1_CTL - Machine Check 1 Control */
+                case 0x404:
+                /* MC2_CTL - Machine Check 2 Control */
+                case 0x408:
+                /* MC4_CTL - Machine Check 4 Control */
+                case 0x40c:
+                /* MC3_CTL - Machine Check 3 Control */
+                case 0x410:
+                    msr.mca_ctl[(ECX - 0x400) >> 2] = EAX | ((uint64_t) EDX << 32);
+                    break;
+                /* MC0_STATUS - Machine Check 0 Status */
+                case 0x401:
+                /* MC0_ADDR - Machine Check 0 Address */
+                case 0x402:
+                /* MC1_STATUS - Machine Check 1 Status */
+                case 0x405:
+                /* MC1_ADDR - Machine Check 1 Address */
+                case 0x406:
+                /* MC2_STATUS - Machine Check 2 Status */
+                case 0x409:
+                /* MC2_ADDR - Machine Check 2 Address */
+                case 0x40a:
+                /* MC4_STATUS - Machine Check 4 Status */
+                case 0x40d:
+                /* MC4_ADDR - Machine Check 4 Address */
+                case 0x40e:
+                /* MC3_STATUS - Machine Check 3 Status */
+                case 0x411:
+                /* MC3_ADDR - Machine Check 3 Address */
+                case 0x412:
+                    if (EAX || EDX)
+                        x86gpf(NULL, 0);
+                    break;
+                /* Unknown */
+                case 0x570:
+                    msr.ecx570 = EAX | ((uint64_t) EDX << 32);
+                    break;
+                /* Unknown, possibly debug registers? */
+                case 0x1000 ... 0x1007:
+                /* Unknown, possibly control registers? */
+                case 0x2000:
+                case 0x2002 ... 0x2004:
+                    break;
+                /* Extended Feature Enable Register */
+                case 0xc0000080:
+                    if (cpu_s->cpu_type < CPU_GENERICINTEL)
+                        goto i686_invalid_wrmsr;
+                    temp = EAX | ((uint64_t) EDX << 32);
+                    //if (temp & ~1ULL)
+                    //    x86gpf(NULL, 0);
+                    //else
+                        msr.amd_efer = temp;
+                    flushmmucache();
+                    break;
+                /* SYSCALL Target Address Register */
+                case 0xc0000081:
+                    if (cpu_s->cpu_type < CPU_GENERICINTEL)
+                        goto i686_invalid_wrmsr;
+
+                    msr.amd_star = EAX | ((uint64_t) EDX << 32);
+                    break;
+                default:
+i686_invalid_wrmsr:
+                    cpu_log("WRMSR: Invalid MSR: %08X\n", ECX);
+                    x86gpf(NULL, 0);
+                    break;
+            }
+            break;
+            }
+        case CPU_PENTIUM4W:
+        {
+            switch(ECX)
+            {
+                /* Machine Check Exception Address */
+                case 0x00:
+                /* Machine Check Exception Type */
+                case 0x01:
+                    if (EAX || EDX)
+                        x86gpf(NULL, 0);
+                    break;
+                /* Time Stamp Counter */
+                case 0x10:
+                    timer_set_new_tsc(EAX | ((uint64_t) EDX << 32));
+                    break;
+                /* Unknown */
+                case 0x18:
+                    break;
+                /* IA32_APIC_BASE - APIC Base Address */
+                case 0x1b:
+                    pclog("APIC_BASE write: %08X%08X\n", EDX, EAX);
+                    
+                    if (current_lapic) {
+                        uint8_t disabled = (!(msr.apic_base & (1 << 11)));
+                        
+                        msr.apic_base = EAX | ((uint64_t) EDX << 32);
+                        if (disabled) msr.apic_base &= ~(1 << 11);
+                        apic_lapic_set_base(msr.apic_base & 0xFFFFFFFFull);
+                    }
+                    
+                    // msr.apic_base = EAX | ((uint64_t) EDX << 32);
+                    break;
+                /* Unknown (undocumented?) MSR used by the Hyper-V BIOS */
+                case 0x20:
+                    msr.ecx20 = EAX | ((uint64_t) EDX << 32);
+                    break;
+                /* EBL_CR_POWERON - Processor Hard Power-On Configuration */
+                case 0x2a:
                     break;
                 /* TEST_CTL - Test Control Register */
                 case 0x33:
@@ -4172,6 +6139,20 @@ pentium_invalid_wrmsr:
                 case 0x187:
                     msr.evntsel[ECX - 0x186] = EAX | ((uint64_t) EDX << 32);
                     break;
+//#if 0
+                case 0x198:
+                    msr.ecx198 = EAX | ((uint64_t) EDX << 32);
+                    break;
+                case 0x19a:
+                    msr.ecx19a = EAX | ((uint64_t) EDX << 32);
+                    break;
+                case 0x19d:
+                    msr.ecx19d = EAX | ((uint64_t) EDX << 32);
+                    break;
+                case 0x1a0:
+                    msr.ecx1a0 = EAX | ((uint64_t) EDX << 32);
+                    break;
+//#endif
                 case 0x1d3:
                     break;
                 /* DEBUGCTLMSR - Debugging Control Register */
@@ -4185,10 +6166,23 @@ pentium_invalid_wrmsr:
                 /* ECX & 0: MTRRphysBase0 ... MTRRphysBase7
                    ECX & 1: MTRRphysMask0 ... MTRRphysMask7 */
                 case 0x200 ... 0x20f:
-                    if (ECX & 1)
-                        msr.mtrr_physmask[(ECX - 0x200) >> 1] = EAX | ((uint64_t) EDX << 32);
-                    else
-                        msr.mtrr_physbase[(ECX - 0x200) >> 1] = EAX | ((uint64_t) EDX << 32);
+                    temp  = EAX | ((uint64_t) EDX << 32);
+                    temp2 = (ECX - 0x200) >> 1;
+                    if (ECX & 1) {
+                        cpu_log("MTRR physmask[%d] = %08llx\n", temp2, temp);
+
+                        if ((msr.mtrr_physmask[temp2] >> 11) & 0x1)
+                            mem_del_mtrr(msr.mtrr_physbase[temp2] & ~(0xFFF), msr.mtrr_physmask[temp2] & ~(0xFFF));
+
+                        if ((temp >> 11) & 0x1)
+                            mem_add_mtrr(msr.mtrr_physbase[temp2] & ~(0xFFF), temp & ~(0xFFF), msr.mtrr_physbase[temp2] & 0xFF);
+
+                        msr.mtrr_physmask[temp2] = temp;
+                    } else {
+                        cpu_log("MTRR physbase[%d] = %08llx\n", temp2, temp);
+
+                        msr.mtrr_physbase[temp2] = temp;
+                    }
                     break;
                 /* MTRRfix64K_00000 */
                 case 0x250:
@@ -4267,12 +6261,13 @@ pentium_invalid_wrmsr:
                 case 0x2002 ... 0x2004:
                     break;
                 default:
-i686_invalid_wrmsr:
+p4w_invalid_wrmsr:
                     cpu_log("WRMSR: Invalid MSR: %08X\n", ECX);
                     x86gpf(NULL, 0);
                     break;
             }
             break;
+        }
     }
 }
 

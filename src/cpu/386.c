@@ -27,6 +27,8 @@
 #include <86box/fdc.h>
 #include <86box/machine.h>
 #include <86box/plat_fallthrough.h>
+#include <86box/device.h>
+#include <86box/apic.h>
 #include <86box/plat_unused.h>
 #include <86box/gdbstub.h>
 #ifndef OPS_286_386
@@ -228,10 +230,10 @@ exec386_2386(int32_t cycs)
 
     int      vector;
     int      tempi;
-    int32_t  cycdiff;
-    int32_t  oldcyc;
-    int32_t  cycle_period;
-    int32_t  ins_cycles;
+    int64_t  cycdiff;
+    int64_t  oldcyc;
+    int64_t  cycle_period;
+    int64_t  ins_cycles;
     uint32_t addr;
 
     cycles += cycs;
@@ -293,6 +295,7 @@ exec386_2386(int32_t cycs)
                 if (opcode == 0xf0)
                     in_lock = 1;
                 x86_2386_opcodes[(opcode | cpu_state.op32) & 0x3ff](fetchdat);
+                cpu_state.sse_xmm = 0;
                 in_lock = 0;
                 if (x86_was_reset)
                     break;
@@ -381,7 +384,7 @@ block_ended:
 #else
                 nmi = 0;
 #endif
-            } else if ((cpu_state.flags & I_FLAG) && pic.int_pending && !cpu_end_block_after_ins) {
+            } else if ((cpu_state.flags & I_FLAG) && (pic_pending_int()) && !cpu_end_block_after_ins) {
                 vector = picinterrupt();
                 if (vector != -1) {
                     flags_rebuild();
@@ -403,6 +406,8 @@ block_ended:
 
             ins_cycles -= cycles;
             tsc += ins_cycles;
+            if (current_lapic)
+                lapic_timer_advance_ticks(ins_cycles);
 
             cycdiff = oldcyc - cycles;
 

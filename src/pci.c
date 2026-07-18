@@ -30,6 +30,8 @@
 #include <86box/pci.h>
 #include <86box/keyboard.h>
 #include <86box/plat_unused.h>
+#include <86box/timer.h>
+#include <86box/apic.h>
 
 #define PCI_ENABLED               0x80000000
 
@@ -194,6 +196,8 @@ pci_irq(uint8_t slot, uint8_t pci_int, int level, int set, uint8_t *irq_state)
                         level    = !!pci_irq_level[irq_routing];
                         if (level && is_vfio)
                             level--;
+                        
+                        pci_int_index = irq_routing;
                         break;
 
                     /* Sometimes, PCI devices are mapped to direct IRQ's. */
@@ -232,6 +236,40 @@ pci_irq(uint8_t slot, uint8_t pci_int, int level, int set, uint8_t *irq_state)
             /* Direct IRQ line (RichardG's ACPI workaround, may no longer be needed). */
             irq_line = slot & PCI_IRQ_MAX;
             break;
+    }
+
+    if (slot >= PCI_MIRQ_BASE && slot <= (PCI_MIRQ_BASE | 0x1)) {
+        if (set)
+        {
+            if (current_ioapic) {
+                //pclog("Slot %d, IRQ %d\n", slot, 20 + (slot - PCI_MIRQ_BASE));
+                apic_ioapic_set_irq(current_ioapic, 20 + (slot - PCI_MIRQ_BASE), 1);
+            }
+        }
+        else
+        {
+            if (current_ioapic) {
+                //pclog("Slot %d, IRQ %d (clear)\n", slot, 20 + (slot - PCI_MIRQ_BASE));
+                apic_ioapic_clear_irq(current_ioapic, 20 + (slot - PCI_MIRQ_BASE));
+            }
+        }
+    }
+
+    if (slot >= 0 && slot <= PCI_CARD_MAX) {
+        if (set)
+        {
+            if (current_ioapic) {
+                //pclog("Slot %d, IRQ %d\n", slot, 16 + pci_int_index);
+                apic_ioapic_set_irq(current_ioapic, 16 + pci_int_index, level);
+            }
+        }
+        else
+        {
+            if (current_ioapic) {
+                //pclog("Slot %d, IRQ %d (clear)\n", slot, 16 + pci_int_index);
+                apic_ioapic_clear_irq(current_ioapic, 16 + pci_int_index);
+            }
+        }
     }
 
     if (irq_line > PCI_IRQ_MAX)

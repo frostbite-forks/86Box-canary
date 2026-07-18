@@ -1525,7 +1525,7 @@ emu8k_outw(uint16_t addr, uint16_t val, void *priv)
         default:
             break;
     }
-    emu8k_log("EMU8K WRITE: Unknown register write: %04X-%02X(%d/%d): %04X \n", addr, (emu8k->cur_reg) << 5 | emu8k->cur_voice,
+    emu8k_log("EMU8K WRITE: : Unknown register write: %04X-%02X(%d/%d): %04X \n", addr, (emu8k->cur_reg) << 5 | emu8k->cur_voice,
               emu8k->cur_reg, emu8k->cur_voice, val);
 }
 
@@ -1770,7 +1770,6 @@ emu8k_update(emu8k_t *emu8k)
     /* Voices section  */
     for (uint8_t c = 0; c < 32; c++) {
         emu_voice = &emu8k->voice[c];
-        buf       = &emu8k->buffer[emu8k->pos * 2];
 
         if (emu_voice->env_engine_on || emu_voice->cvcf_curr_volume)
             num_active++;

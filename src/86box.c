@@ -101,6 +101,7 @@
 #include <86box/gdbstub.h>
 #include <86box/machine_status.h>
 #include <86box/acpi.h>
+#include <86box/apic.h>
 #include <86box/nv/vid_nv_rivatimer.h>
 #include <86box/vfio.h>
 
@@ -2005,7 +2006,7 @@ pc_run(void)
 
     /* Run a block of code. */
     startblit();
-    cpu_exec((int32_t) cpu_s->rspeed / (force_10ms ? 100 : 1000));
+    cpu_exec((int64_t) cpu_s->rspeed / (force_10ms ? 100 : 1000));
     ack_pause();
 #ifdef USE_GDBSTUB /* avoid a KBC FIFO overflow when CPU emulation is stalled */
     if (gdbstub_step == GDBSTUB_EXEC) {

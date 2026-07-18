@@ -68,6 +68,8 @@ const machine_filter_t machine_types[] = {
     { "[1998] Slot 1/Socket 370",         MACHINE_TYPE_SLOT1_370  },
     { "[1998] Slot 2",                    MACHINE_TYPE_SLOT2      },
     { "[1998] Socket 370",                MACHINE_TYPE_SOCKET370  },
+    { "[2000] Socket 423",                MACHINE_TYPE_SOCKET423  },
+    { "[2000] Socket 478",                MACHINE_TYPE_SOCKET478  },
     { "Miscellaneous",                    MACHINE_TYPE_MISC       }
 };
 
@@ -116,6 +118,8 @@ const machine_filter_t machine_chipsets[] = {
     { "Intel 440BX",                MACHINE_CHIPSET_INTEL_440BX         },
     { "Intel 440ZX",                MACHINE_CHIPSET_INTEL_440ZX         },
     { "Intel 440GX",                MACHINE_CHIPSET_INTEL_440GX         },
+    { "Intel i815EP",               MACHINE_CHIPSET_INTEL_I815EP        },
+    { "Intel i845",                 MACHINE_CHIPSET_INTEL_I845          },
     { "OPTi 283",                   MACHINE_CHIPSET_OPTI_283            },
     { "OPTi 291",                   MACHINE_CHIPSET_OPTI_291            },
     { "OPTi 381",                   MACHINE_CHIPSET_OPTI_381            },
@@ -6876,7 +6880,6 @@ const machine_t machines[] = {
         .net_device               = NULL,
         .aliases                  = { "" }
     },
-
     /* ALi M6117 machines */
     /* Has IBM PS/2 Type 1 KBC firmware. */
     {
@@ -17164,7 +17167,7 @@ const machine_t machines[] = {
         .aliases                  = { "" }
     },
     /* The base board has a Holtek HT6542B which emulates the AMIKey-2 ('H') KBC firmware. */
-    {
+    /*{
         .name              = "[i430HX] ASUS P/I-P65UP5 (C-P55T2D)",
         .internal_name     = "p65up5_cp55t2d",
         .type              = MACHINE_TYPE_SOCKET7,
@@ -17184,7 +17187,7 @@ const machine_t machines[] = {
             .min_multi   = 1.5,
             .max_multi   = 3.5
         },
-        .bus_flags = MACHINE_PS2_PCI | MACHINE_BUS_USB, /* Machine has AMB */
+        .bus_flags = MACHINE_PS2_PCI | MACHINE_BUS_USB, // Machine has AMB
         .flags     = MACHINE_IDE_DUAL | MACHINE_APM | MACHINE_USB,
         .ram       = {
             .min  = 4096,
@@ -17210,7 +17213,7 @@ const machine_t machines[] = {
         .snd_device               = NULL,
         .net_device               = NULL,
         .aliases                  = { "" }
-    },
+    },*/
     /* According to tests from real hardware: This has AMI MegaKey KBC firmware on the
        PC87306 Super I/O chip, command 0xA1 returns '5'.
        Command 0xA0 copyright string: (C)1994 AMI . */
@@ -20375,7 +20378,7 @@ const machine_t machines[] = {
         .aliases                  = { "" }
     },
     /* The base board has a Holtek HT6542B with AMIKey-2 ('H') KBC firmware. */
-    {
+    /*{
         .name              = "[i440FX] ASUS P/I-P65UP5 (C-P6ND)",
         .internal_name     = "p65up5_cp6nd",
         .type              = MACHINE_TYPE_SOCKET8,
@@ -20395,7 +20398,7 @@ const machine_t machines[] = {
             .min_multi   = 1.5,
             .max_multi   = 8.0
         },
-        .bus_flags = MACHINE_PS2_PCI | MACHINE_BUS_USB, /* Machine has AMB */
+        .bus_flags = MACHINE_PS2_PCI | MACHINE_BUS_USB, // Machine has AMB
         .flags     = MACHINE_IDE_DUAL | MACHINE_APM | MACHINE_USB,
         .ram       = {
             .min  = 8192,
@@ -20421,7 +20424,7 @@ const machine_t machines[] = {
         .snd_device               = NULL,
         .net_device               = NULL,
         .aliases                  = { "" }
-    },
+    },*/
     /* Has a VIA VT82C42N KBC. */
     {
         .name              = "[i440FX] Biostar MB-8600TTC",
@@ -20917,7 +20920,7 @@ const machine_t machines[] = {
         .aliases                  = { "Advanced Integration Research P6KDI", "" }
     },
     /* The base board has a Holtek HT6542B KBC which emulates the AMIKEY-2 'H' KBC firmware. */
-    {
+    /*{
         .name              = "[i440FX] ASUS P/I-P65UP5 (C-PKND)",
         .internal_name     = "p65up5_cpknd",
         .type              = MACHINE_TYPE_SLOT1,
@@ -20963,7 +20966,7 @@ const machine_t machines[] = {
         .snd_device               = NULL,
         .net_device               = NULL,
         .aliases                  = { "" }
-    },
+    },*/
     /* This has a Holtek KBC. */
     {
         .name              = "[i440FX] ASUS KN97",
@@ -21709,6 +21712,52 @@ const machine_t machines[] = {
         .net_device               = NULL,
         .aliases                  = { "" }
     },
+    /* 440BX */ 
+    /* Has a Winbond W83977EF Super I/O chip with on-chip KBC with AMIKey-2 KBC 
+       firmware. */ 
+    { 
+        .name = "[i440BX] ASUS P2B-LS (coreboot)", 
+        .internal_name = "p2bls_coreboot", 
+        .type = MACHINE_TYPE_SLOT1, 
+        .chipset = MACHINE_CHIPSET_INTEL_440BX, 
+        .init = machine_at_p2bls_coreboot_init, 
+        .p1_handler = NULL, 
+        .gpio_handler = NULL, 
+        .available_flag = MACHINE_AVAILABLE, 
+        .gpio_acpi_handler = NULL, 
+        .cpu = { 
+            .package = CPU_PKG_SLOT1, 
+            .block = CPU_BLOCK_NONE, 
+            .min_bus = 50000000, 
+            .max_bus = 112121212, 
+            .min_voltage = 1300, 
+            .max_voltage = 3500, 
+            .min_multi = 1.5, 
+            .max_multi = 8.0 
+        }, 
+        .bus_flags = MACHINE_PS2_AGP | MACHINE_BUS_USB, 
+        .flags = MACHINE_IDE_DUAL | MACHINE_APM | MACHINE_ACPI | MACHINE_USB, /* Machine has internal SCSI: Adaptec AIC-7890AB */ 
+        .ram = { 
+            .min = 8192, 
+            .max = 1048576, 
+            .step = 8192 
+        }, 
+        .nvrmask = 255,
+        .jumpered_ecp_dma = 0,
+        .default_jumpered_ecp_dma = -1,
+        .kbc_device = NULL, 
+        .kbc_p1 = 0xff, 
+        .gpio = 0xffffffff, 
+        .gpio_acpi = 0xffffffff, 
+        .device = NULL, 
+        .kbd_device = NULL, 
+        .fdc_device = NULL, 
+        .sio_device = NULL, 
+        .vid_device = NULL, 
+        .snd_device = NULL, 
+        .net_device = NULL,
+        .aliases                  = { "" },
+    }, 
     /* Has a Winbond W83977EF Super I/O chip with on-chip KBC with AMIKey-2 KBC
        firmware. */
     {
@@ -21756,6 +21805,51 @@ const machine_t machines[] = {
         .vid_device               = NULL,
         .snd_device               = NULL,
         .net_device               = NULL,
+        .aliases                  = { "" }
+    },
+    /* Has a Winbond W83977EF Super I/O chip with on-chip KBC with AMIKey-2 KBC 
+       firmware. */ 
+    { 
+        .name = "[i440BX] ASUS P3B-F (coreboot)", 
+        .internal_name = "p3bf_coreboot", 
+        .type = MACHINE_TYPE_SLOT1, 
+        .chipset = MACHINE_CHIPSET_INTEL_440BX, 
+        .init = machine_at_p3bf_coreboot_init, 
+        .p1_handler = NULL, 
+        .gpio_handler = NULL, 
+        .available_flag = MACHINE_AVAILABLE, 
+        .gpio_acpi_handler = NULL, 
+        .cpu = { 
+            .package = CPU_PKG_SLOT1, 
+            .block = CPU_BLOCK_NONE, 
+            .min_bus = 66666667, 
+            .max_bus = 150000000, 
+            .min_voltage = 1300, 
+            .max_voltage = 3500, 
+            .min_multi = 1.5, 
+            .max_multi = 8.0 
+        }, 
+        .bus_flags = MACHINE_PS2_AGP | MACHINE_BUS_USB, 
+        .flags = MACHINE_IDE_DUAL | MACHINE_APM | MACHINE_ACPI | MACHINE_USB, 
+        .ram = { 
+            .min = 8192, 
+            .max = 1048576, 
+            .step = 8192 
+        }, 
+        .nvrmask = 255,
+        .jumpered_ecp_dma = 0,
+        .default_jumpered_ecp_dma = -1,
+        .kbc_device = NULL, 
+        .kbc_p1 = 0xff, 
+        .gpio = 0xffffffff, 
+        .gpio_acpi = 0xffffffff, 
+        .device = NULL, 
+        .kbd_device = NULL, 
+        .fdc_device = NULL, 
+        .sio_device = NULL, 
+        .vid_device = NULL, 
+        .snd_device = NULL, 
+        .net_device = NULL,
         .aliases                  = { "" }
     },
     /* Has a Winbond W83977TF Super I/O chip with on-chip KBC with AMIKey-2 KBC
@@ -23107,6 +23201,55 @@ const machine_t machines[] = {
         .aliases                  = { "Soltek SL-63A", "Magic-Pro MP-6ZX", "" }
     },
 
+    /* Has a NSC PC87366 LPC Super I/O with on-chip AMIKey-2 KBC firmware */
+    {
+        .name = "[Intel i815E] Biostar M6TSL",
+        .internal_name = "m6tsl",
+        .type = MACHINE_TYPE_SOCKET370,
+        .chipset = MACHINE_CHIPSET_INTEL_I815EP,
+        .init = machine_at_m6tsl_init,
+        .p1_handler = NULL,
+        .gpio_handler = NULL,
+        .available_flag = MACHINE_AVAILABLE,
+        .gpio_acpi_handler = NULL,
+        .cpu = {
+            .package = CPU_PKG_SOCKET370,
+            .block = CPU_BLOCK_NONE,
+            .min_bus = 66666666,
+            .max_bus = 133333333,
+            .min_voltage = 1300,
+            .max_voltage = 3500,
+            .min_multi = 1.5,
+            .max_multi = 8.0
+        },
+        .bus_flags = MACHINE_PS2_NOISA,
+        .flags = MACHINE_IDE_DUAL | MACHINE_SOUND,
+        .ram = {
+            .min = 32768,
+            .max = 524288,
+            .step = 32768
+        },
+        .nvrmask = 255,
+        .jumpered_ecp_dma         = 0,
+        .default_jumpered_ecp_dma = -1,
+        .kbc_device               = &kbc_at_device,
+        .kbc_params               = KBC_VEN_AMI | 0x00004600,
+        .nvr_device               = NULL,
+        .nvr_params               = 0x00000000,
+        .sio_device = &nsc366_device,
+        .sio_params               = 0x00000000,
+        .kbc_p1                   = 0x00000cf0,
+        .gpio                     = 0xffffffff,
+        .gpio_acpi                = 0xffffffff,
+        .device = NULL,
+        .kbd_device               = NULL,
+        .fdc_device = NULL,
+        .vid_device = NULL,
+        .snd_device = NULL,
+        .net_device = NULL,
+        .aliases                  = { "" }
+    },
+
     /* SiS (5)600 */
     /* Has the SiS 600 chipset, which is a re-brand of the 5600, with
        on-chip KBC. */
@@ -23425,8 +23568,8 @@ const machine_t machines[] = {
             .max_bus     = 150000000,
             .min_voltage = 1300,
             .max_voltage = 3500,
-            .min_multi   = 1.5,
-            .max_multi   = 8.0
+            .min_multi = 1.5,
+            .max_multi = 25.0
         },
         .bus_flags = MACHINE_PS2_NOI97 | MACHINE_BUS_USB, /* Has Asus-proprietary LAN/SCSI slot */
         .flags     = MACHINE_IDE_DUAL | MACHINE_SOUND | MACHINE_APM | MACHINE_ACPI | MACHINE_GAMEPORT | MACHINE_USB,
@@ -23552,6 +23695,54 @@ const machine_t machines[] = {
         .snd_device               = NULL,
         .net_device               = NULL,
         .aliases                  = { "MSI MS-6309", "" }
+    },
+
+    {
+        .name = "[Intel i845] MSI MS-6529",
+        .internal_name = "ms6529",
+        .type = MACHINE_TYPE_SOCKET423,
+        .chipset = MACHINE_CHIPSET_INTEL_I845,
+        .init = machine_at_ms6529_init,
+        .p1_handler = NULL,
+        .gpio_handler = NULL,
+        .available_flag = MACHINE_AVAILABLE,
+        .gpio_acpi_handler = NULL,
+        .cpu = {
+            .package = CPU_PKG_SOCKET423,
+            .block = CPU_BLOCK_NONE,
+            .min_bus = 200000000,
+            .max_bus = 200000000,
+            .min_voltage = 1300,
+            .max_voltage = 3500,
+            .min_multi = 1.0,
+            .max_multi = 8.0
+        },
+        .bus_flags = MACHINE_PS2_NOISA,
+        .flags = MACHINE_IDE_DUAL | MACHINE_SOUND,
+        .ram = {
+            .min = 262144,
+            .max = 3145728,
+            .step = 262144
+        },
+        .nvrmask = 255,
+        .jumpered_ecp_dma         = 0,
+        .default_jumpered_ecp_dma = -1,
+        .kbc_device               = NULL,
+        .kbc_params               = 0,
+        .nvr_device               = NULL,
+        .nvr_params               = 0x00000000,
+        .sio_device               = &w83627hf_device,
+        .sio_params               = 0x00000000,
+        .kbc_p1                   = 0x00000cf0,
+        .gpio                     = 0xffffffff,
+        .gpio_acpi                = 0xffffffff,
+        .device = NULL,
+        .kbd_device               = NULL,
+        .fdc_device = NULL,
+        .vid_device = NULL,
+        .snd_device = NULL,
+        .net_device = NULL,
+        .aliases                  = { "" }
     },
 
     /* Miscellaneous/Fake/Hypervisor machines */

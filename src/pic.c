@@ -36,6 +36,8 @@
 #include <86box/apm.h>
 #include <86box/nvr.h>
 #include <86box/acpi.h>
+#include <86box/mem.h>
+#include <86box/apic.h>
 #include <86box/plat_unused.h>
 
 enum {
@@ -587,6 +589,11 @@ pic_set_pci(void)
         io_sethandler(i, 0x0002, pic_read, NULL, NULL, pic_write, NULL, NULL, &pic);
         io_sethandler(i + 0x0080, 0x0002, pic_read, NULL, NULL, pic_write, NULL, NULL, &pic2);
     }
+
+    for (uint16_t i = 0xff20; i < 0xff40; i += 4) {
+        io_sethandler(i, 0x0002, pic_read, NULL, NULL, pic_write, NULL, NULL, &pic);
+        io_sethandler(i + 0x0080, 0x0002, pic_read, NULL, NULL, pic_write, NULL, NULL, &pic2);
+    }
 }
 
 void
@@ -692,12 +699,32 @@ picint_common(uint16_t num, int level, int set, uint8_t *irq_state)
     uint16_t w;
     pic_t   *dev;
 
+
     /*
        Do this because some emulated cards will, for whatever reason, attempt to
        raise an IRQ at init when the PIC has not yet been properly initialized.
      */
     if (update_pending == NULL)
         return;
+    
+    if (set)
+    {
+            if (current_ioapic) {
+                uint8_t i = 0;
+                for (i = 0; i < 16; i++) {
+                    if ((num & (1 << i)) && i != 2) apic_ioapic_set_irq(current_ioapic, (i == 0) ? 2 : i, level);
+                }
+            }
+    }
+    else
+    {
+            if (current_ioapic) {
+                uint8_t i = 0;
+                for (i = 0; i < 16; i++) {
+                    if ((num & (1 << i)) && i != 2) apic_ioapic_clear_irq(current_ioapic, (i == 0) ? 2 : i);
+                }
+            }
+    }
 
     /* Make sure to ignore all slave IRQ's, and in case of AT+,
        translate IRQ 2 to IRQ 9. */
@@ -801,7 +828,7 @@ picint_common(uint16_t num, int level, int set, uint8_t *irq_state)
         }
 
         update_pending();
-    }
+   }
 }
 
 static uint8_t
@@ -885,7 +912,7 @@ pic_irq_ack(void)
 }
 
 int
-picinterrupt(void)
+picinterrupt_common(void)
 {
     int ret = -1;
 
@@ -902,6 +929,11 @@ picinterrupt(void)
                 pic.interrupt |= 0x40; /* Mark slave pending. */
         }
     } else {
+        if (current_lapic && current_ioapic && lapic_irq_pending(current_lapic) > 0)
+        {
+            return apic_lapic_picinterrupt();
+        }
+
         /* pic.int_pending was somehow cleared despite the fact we made it here,
            do a spurious IRQ 7. */
         pic.int_pending = 1;
@@ -924,5 +956,24 @@ picinterrupt(void)
         }
     }
 
+    return ret;
+}
+
+int
+picinterrupt(void)
+{
+    int ret = -1;
+
+    if (!lapic_is_pic_enabled())
+    {
+        if (current_lapic && current_ioapic && lapic_irq_pending(current_lapic) > 0)
+        {
+            return apic_lapic_picinterrupt();
+        }
+
+        return current_lapic->lapic_spurious_interrupt & 0xff;
+    }
+
+    ret = picinterrupt_common();
     return ret;
 }

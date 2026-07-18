@@ -25,9 +25,12 @@
 #include <86box/mem.h>
 #include <86box/nmi.h>
 #include <86box/pic.h>
+#include <86box/random.h>
 #include <86box/timer.h>
 #include <86box/fdd.h>
 #include <86box/fdc.h>
+#include <86box/device.h>
+#include <86box/apic.h>
 #include <86box/machine.h>
 #include <86box/plat_fallthrough.h>
 #include <86box/plat_unused.h>
@@ -185,6 +188,65 @@ fetch_ea_16_long(uint32_t rmdat)
     }
 }
 
+static __inline void
+fetch_ea_64_long(uint32_t rmdat)
+{
+    eal_r = eal_w = NULL;
+    easeg         = cpu_state.ea_seg->base;
+    if ((cpu_rm == 4) || (cpu_rm == 0x14) || (cpu_rm == 0x1c)) {
+        uint8_t sib = rmdat >> 8;
+
+        switch (cpu_mod) {
+            case 0:
+                cpu_state.eaaddr = cpu_state.regs[sib & 7].l;
+                cpu_state.pc++;
+                break;
+            case 1:
+                cpu_state.pc++;
+                cpu_state.eaaddr = ((uint32_t) (int8_t) getbyte()) + cpu_state.regs[sib & 7].l;
+                break;
+            case 2:
+                cpu_state.eaaddr = (fastreadl(cs + cpu_state.pc + 1)) + cpu_state.regs[sib & 7].l;
+                cpu_state.pc += 5;
+                break;
+        }
+        /*SIB byte present*/
+        if ((sib & 7) == 5 && !cpu_mod)
+            cpu_state.eaaddr = getlong();
+        else if ((sib & 6) == 4 && !cpu_state.ssegs) {
+            easeg            = ss;
+            cpu_state.ea_seg = &cpu_state.seg_ss;
+        }
+        if (((sib >> 3) & 7) != 4)
+            cpu_state.eaaddr += cpu_state.regs[(sib >> 3) & 7].l << (sib >> 6);
+    } else {
+        cpu_state.eaaddr = cpu_state.regs[cpu_rm].l;
+        if (cpu_mod) {
+            if (cpu_rm == 5 && !cpu_state.ssegs) {
+                easeg            = ss;
+                cpu_state.ea_seg = &cpu_state.seg_ss;
+            }
+            if (cpu_mod == 1) {
+                cpu_state.eaaddr += ((uint32_t) (int8_t) (rmdat >> 8));
+                cpu_state.pc++;
+            } else {
+                cpu_state.eaaddr += getlong();
+            }
+        } else if (cpu_rm == 5) {
+            //RIP-relative addressing
+            if(!(use32 & 0x200)) cpu_state.eaaddr = (cpu_state.pc | ((uint64_t)cpu_state.pc_high << 32)) + getlong();
+            else cpu_state.eaaddr = cpu_state.pc + getlong();
+        }
+    }
+    if (easeg != 0xFFFFFFFF && ((easeg + cpu_state.eaaddr) & 0xFFF) <= 0xFFC) {
+        uint32_t addr = easeg + cpu_state.eaaddr;
+        if (readlookup2[addr >> 12] != (uintptr_t) -1)
+            eal_r = (uint32_t *) (readlookup2[addr >> 12] + addr);
+        if (writelookup2[addr >> 12] != (uintptr_t) -1)
+            eal_w = (uint32_t *) (writelookup2[addr >> 12] + addr);
+    }
+}
+
 #define fetch_ea_16(rmdat)       \
     cpu_state.pc++;              \
     cpu_mod = (rmdat >> 6) & 3;  \
@@ -202,6 +264,17 @@ fetch_ea_16_long(uint32_t rmdat)
     cpu_rm  = rmdat & 7;         \
     if (cpu_mod != 3) {          \
         fetch_ea_32_long(rmdat); \
+    }                            \
+    if (cpu_state.abrt)          \
+    return 1
+
+#define fetch_ea_64(rmdat)       \
+    cpu_state.pc++;              \
+    cpu_mod = (rmdat >> 6) & 3;  \
+    cpu_reg = ((rmdat >> 3) & 7) | ((cpu_state.rex_byte & 4) << 1) | (cpu_state.rex_present << 4);  \
+    cpu_rm  = (rmdat & 7) | ((cpu_state.rex_byte & 1) << 3) | (cpu_state.rex_present << 4);         \
+    if (cpu_mod != 3) {          \
+        fetch_ea_64_long(rmdat); \
     }                            \
     if (cpu_state.abrt)          \
     return 1
@@ -268,6 +341,21 @@ codegen_mmx_enter(void)
 }
 
 int
+codegen_sse_enter(void)
+{
+    SSE_ENTER();
+    return 0;
+}
+
+int
+codegen_sse_check_align(uint32_t eaddr)
+{
+    if (eaddr & 15)
+        return 1;
+    return 0;
+}
+
+int
 codegen_femms(void)
 {
     if (!cpu_has_feature(CPU_FEATURE_MMX)) {
@@ -309,8 +397,11 @@ update_tsc(void)
         cycdiff -= delta;
     }
 
-    if (cycdiff > 0)
+    if (cycdiff > 0) {
         tsc += cycdiff;
+        if (current_lapic)
+            lapic_timer_advance_ticks(cycdiff);
+    }
 
     if (cycdiff > 0) {
         if (TIMER_VAL_LESS_THAN_VAL(timer_target, (uint64_t) tsc))
@@ -362,6 +453,7 @@ exec386_dynarec_int(void)
             cpu_state.eflags &= ~(RF_FLAG);
 #    endif
             x86_opcodes[(opcode | cpu_state.op32) & 0x3ff](fetchdat);
+            cpu_state.sse_xmm = 0;
         }
 
 #    ifndef USE_NEW_DYNAREC
@@ -401,7 +493,7 @@ exec386_dynarec_int(void)
             CPU_BLOCK_END();
         else if (nmi && nmi_enable && nmi_mask)
             CPU_BLOCK_END();
-        else if ((cpu_state.flags & I_FLAG) && pic.int_pending && !cpu_end_block_after_ins)
+        else if ((cpu_state.flags & I_FLAG) && (pic_pending_int()) && !cpu_end_block_after_ins)
             CPU_BLOCK_END();
     }
 
@@ -660,6 +752,8 @@ exec386_dynarec_dyn(void)
 
                 x86_opcodes[(opcode | cpu_state.op32) & 0x3ff](fetchdat);
 
+                cpu_state.sse_xmm = 0;
+
                 if (x86_was_reset)
                     break;
             }
@@ -691,7 +785,7 @@ exec386_dynarec_dyn(void)
                 CPU_BLOCK_END();
             if (nmi && nmi_enable && nmi_mask)
                 CPU_BLOCK_END();
-            if ((cpu_state.flags & I_FLAG) && pic.int_pending && !cpu_end_block_after_ins)
+            if ((cpu_state.flags & I_FLAG) && (pic_pending_int()) && !cpu_end_block_after_ins)
                 CPU_BLOCK_END();
 
             if (cpu_end_block_after_ins) {
@@ -761,6 +855,7 @@ exec386_dynarec_dyn(void)
                 cpu_state.pc++;
 
                 x86_opcodes[(opcode | cpu_state.op32) & 0x3ff](fetchdat);
+                cpu_state.sse_xmm = 0;
 
                 if (x86_was_reset)
                     break;
@@ -793,7 +888,7 @@ exec386_dynarec_dyn(void)
                 CPU_BLOCK_END();
             if (nmi && nmi_enable && nmi_mask)
                 CPU_BLOCK_END();
-            if ((cpu_state.flags & I_FLAG) && pic.int_pending && !cpu_end_block_after_ins)
+            if ((cpu_state.flags & I_FLAG) && (pic_pending_int()) && !cpu_end_block_after_ins)
                 CPU_BLOCK_END();
 
             if (cpu_end_block_after_ins) {
@@ -829,20 +924,20 @@ exec386_dynarec(int32_t cycs)
 {
     int      vector;
     int      tempi;
-    int32_t  cycdiff;
-    int32_t  oldcyc;
-    int32_t  oldcyc2;
+    int64_t  cycdiff;
+    int64_t  oldcyc;
+    int64_t  oldcyc2;
     uint64_t oldtsc;
     uint64_t delta;
 
-    int32_t cyc_period = cycs / (force_10ms ? 2000 : 200); /*5us*/
+    int64_t cyc_period = cycs / (force_10ms ? 2000 : 200); /*5us*/
 
 #    ifdef USE_ACYCS
     acycs = 0;
 #    endif
     cycles_main += cycs;
     while (cycles_main > 0) {
-        int32_t cycles_start;
+        int64_t cycles_start;
 
         cycles += cyc_period;
         cycles_start = cycles;
@@ -921,7 +1016,7 @@ exec386_dynarec(int32_t cycs)
 #    else
                 nmi = 0;
 #    endif
-            } else if ((cpu_state.flags & I_FLAG) && pic.int_pending) {
+            } else if ((cpu_state.flags & I_FLAG) && (pic_pending_int())) {
                 vector = picinterrupt();
                 if (vector != -1) {
 #    ifndef USE_NEW_DYNAREC
@@ -938,11 +1033,16 @@ exec386_dynarec(int32_t cycs)
                 /* TSC has changed, this means interim timer processing has happened,
                    see how much we still need to add. */
                 cycdiff -= delta;
-                if (cycdiff > 0)
+                if (cycdiff > 0) {
                     tsc += cycdiff;
+                    if (current_lapic)
+                        lapic_timer_advance_ticks(cycdiff);
+                }
             } else {
                 /* TSC has not changed. */
                 tsc += cycdiff;
+                if (current_lapic)
+                    lapic_timer_advance_ticks(cycdiff);
             }
 
             if (cycdiff > 0) {
@@ -966,10 +1066,10 @@ exec386(int32_t cycs)
 {
     int      vector;
     int      tempi;
-    int32_t  cycdiff;
-    int32_t  oldcyc;
-    int32_t  cycle_period;
-    int32_t  ins_cycles;
+    int64_t  cycdiff;
+    int64_t  oldcyc;
+    int64_t  cycle_period;
+    int64_t  ins_cycles;
     uint32_t addr;
 
     cycles += cycs;
@@ -1033,6 +1133,7 @@ exec386(int32_t cycs)
                 cpu_state.eflags &= ~(RF_FLAG);
 #endif
                 x86_opcodes[(opcode | cpu_state.op32) & 0x3ff](fetchdat);
+                cpu_state.sse_xmm = 0;
                 if (x86_was_reset)
                     break;
             }
@@ -1129,7 +1230,7 @@ block_ended:
 #else
                 nmi = 0;
 #endif
-            } else if ((cpu_state.flags & I_FLAG) && pic.int_pending && !cpu_end_block_after_ins) {
+            } else if ((cpu_state.flags & I_FLAG) && pic_pending_int() && !cpu_end_block_after_ins) {
                 vector = picinterrupt();
                 if (vector != -1) {
                     flags_rebuild();
@@ -1151,6 +1252,8 @@ block_ended:
 
             ins_cycles -= cycles;
             tsc += ins_cycles;
+            if (current_lapic)
+                lapic_timer_advance_ticks(ins_cycles);
 
             cycdiff = oldcyc - cycles;
 

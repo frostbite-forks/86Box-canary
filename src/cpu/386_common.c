@@ -18,6 +18,7 @@
 #include "x87.h"
 #include <86box/nmi.h>
 #include <86box/mem.h>
+#include <86box/device.h>
 #include <86box/smram.h>
 #include <86box/pic.h>
 #include <86box/pit.h>
@@ -27,6 +28,7 @@
 #include <86box/timer.h>
 
 #include "x86seg.h"
+#include <86box/apic.h>
 #include "386_common.h"
 #include "x86_flags.h"
 #include <86box/plat_unused.h>
@@ -1285,7 +1287,7 @@ enter_smm(int in_hlt)
     uint32_t smram_state = smbase + 0x10000;
 
     /* If it's a CPU on which SMM is not supported, do nothing. */
-    if (!is_am486 && !is_pentium && !is_k5 && !is_k6 && !is_p6 && !is_cxsmm)
+    if (!is_am486 && !is_pentium && !is_k5 && !is_k6 && !is_p6 && !is_cxsmm && !is_athlon)
         return;
 
     x386_common_log("enter_smm(): smbase = %08X\n", smbase);
@@ -1337,7 +1339,7 @@ enter_smm(int in_hlt)
         smram_save_state_cyrix(saved_state, in_hlt);
     else if (is_pentium || is_am486) /* Am486 / 5x86 / Intel P5 (Pentium) */
         smram_save_state_p5(saved_state, in_hlt);
-    else if (is_k5 || is_k6) /* AMD K5 and K6 */
+    else if (is_k5 || is_k6 || is_athlon) /* AMD K5 and K6 */
         smram_save_state_amd_k(saved_state, in_hlt);
     else if (is_p6) /* Intel P6 (Pentium Pro, Pentium II, Celeron) */
         smram_save_state_p6(saved_state, in_hlt);
@@ -1754,6 +1756,7 @@ x86_int_sw_rm(int num)
 void
 x86illegal(void)
 {
+    pclog("opcode %02x fetchdat %08x\n", opcode, fetchdat);
     x86_int(6);
 }
 
@@ -2242,7 +2245,10 @@ nmi_raise(void)
     if (is486 && (cpu_fast_off_flags & 0x20000000))
         cpu_fast_off_advance();
 
-    nmi = 1;
+    if (current_lapic && (current_lapic->lapic_spurious_interrupt & 0x100)) {
+        apic_lapic_service_nmi();
+    } else
+        nmi = 1;
 }
 
 #ifndef USE_DYNAREC

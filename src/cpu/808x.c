@@ -1757,7 +1757,6 @@ stos(int bits)
 static void
 aa(void)
 {
-    set_pzs(8);
     AL = cpu_data & 0x0f;
     wait_cycs(6, 0);
 }
@@ -3348,7 +3347,7 @@ execx86_instruction(void)
 
 /* Executes instructions up to the specified number of cycles. */
 void
-execx86(int cycs)
+execx86(int32_t cycs)
 {
     cycles += cycs;
 

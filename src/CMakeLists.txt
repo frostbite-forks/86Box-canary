@@ -49,6 +49,8 @@ add_executable(86Box
     nvr_at.c
     nvr_ps2.c
     machine_status.c
+    ioapic_82093aa.c
+    lapic.c
 )
 
 if(CMAKE_SYSTEM_NAME MATCHES "Linux")

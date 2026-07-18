@@ -349,6 +349,7 @@ extern void     writememll_no_mmut_2386(uint32_t addr, uint32_t *a64, uint32_t v
 
 extern void     do_mmutranslate_2386(uint32_t addr, uint32_t *a64, int num, int write);
 
+extern uint8_t *getpccache_execute(uint32_t a);
 extern uint8_t *getpccache(uint32_t a);
 extern uint64_t mmutranslatereal(uint32_t addr, int rw);
 extern uint32_t mmutranslatereal32(uint32_t addr, int rw);
@@ -459,6 +460,10 @@ extern void pcjr_waitstates(void *);
 
 extern mem_mapping_t *read_mapping[MEM_MAPPINGS_NO];
 extern mem_mapping_t *write_mapping[MEM_MAPPINGS_NO];
+
+extern void mem_add_mtrr(uint64_t base, uint64_t mask, uint8_t type);
+extern void mem_del_mtrr(uint64_t base, uint64_t mask);
+extern void mem_invalidate_mtrr(uint8_t wb);
 
 #ifdef EMU_CPU_H
 static __inline uint32_t
