@@ -38,6 +38,7 @@
 #endif
 #include <86box/86box.h>
 #include <86box/plat.h>
+#include <86box/bswap.h>
 #include <86box/cdrom.h>
 #include <86box/cdrom_image.h>
 #include <86box/plat_dynld.h>
@@ -195,7 +196,6 @@ ensure_libaaruformat(void)
         libaaruformat_handle = dynld_module("libaaruformat.so", aaruf_imports);
 #endif
         if (!libaaruformat_handle) {
-            warning("Failed to load libaaruformat library.");
             load_failed = true;
             return false;
         }
@@ -478,6 +478,7 @@ generate_subchannel:
         buffer[2352 + 7] = bin2bcd(m);
         buffer[2352 + 8] = bin2bcd(s);
         buffer[2352 + 9] = bin2bcd(f);
+        *(uint16_t*)&buffer[2352 + 10] = bswap16(cdrom_crc16(0xffff, &buffer[2352], 10));
         for (int i = 11; i >= 0; i--)
             for (int j = 7; j >= 0; j--)
                 buffer[2352 + (i * 8) + j] = ((buffer[2352 + i] >> (7 - j)) & 0x01) << 6;
@@ -654,6 +655,7 @@ aaru_image_open(cdrom_t *dev, const char *path)
     aaru_image_t *img = (aaru_image_t *) calloc(1, sizeof(aaru_image_t));
 
     if (!ensure_libaaruformat()) {
+        warning(plat_get_string(STRING_CDROM_LOAD_AARU_ERROR), path);
         free(img);
         return NULL;
     }

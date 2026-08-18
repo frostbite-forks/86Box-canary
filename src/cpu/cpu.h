@@ -721,6 +721,8 @@ extern int cpu_prefetch_width;
 extern int cpu_mem_prefetch_cycles;
 extern int cpu_rom_prefetch_cycles;
 extern int cpu_waitstates;
+extern int io_waitstates;
+extern int reg_op_waitstates;
 extern int cpu_flush_pending;
 extern int cpu_old_paging;
 extern int cpu_cache_int_enabled;
@@ -800,6 +802,7 @@ extern void codegen_reset(void);
 extern void cpu_set_edx(void);
 extern int  divl(uint32_t val);
 extern void execx86(int32_t cycs);
+extern void execx86_new(int32_t cycs);
 extern void execvx0(int32_t cycs);
 extern void enter_smm(int in_hlt);
 extern void enter_smm_check(int in_hlt);
@@ -807,6 +810,7 @@ extern void leave_smm(void);
 extern void exec386_2386(int32_t cycs);
 extern void exec386(int32_t cycs);
 extern void exec386_dynarec(int32_t cycs);
+extern int  is_dynarec_active(void);
 extern int  idivl(int32_t val);
 extern void resetmcr(void);
 extern void resetx86(void);
@@ -931,16 +935,24 @@ extern int cpu_override_interpreter;
 
 extern int is_lock_legal(uint32_t fetchdat);
 
-extern void cpu_INVD(uint8_t wb);
+extern void     (*prefetch_queue_set_pos)(int pos);
+extern void     (*prefetch_queue_set_ip)(uint16_t ip);
+extern void     (*prefetch_queue_set_prefetching)(int p);
+extern int      (*prefetch_queue_get_pos)(void);
+extern uint16_t (*prefetch_queue_get_ip)(void);
+extern int      (*prefetch_queue_get_prefetching)(void);
+extern int      (*prefetch_queue_get_size)(void);
 
+extern void    i808x_hook_prefetch_queue(void     (*pf_set_pos)(int pos),
+                                         void     (*pf_set_ip)(uint16_t ip),
+                                         void     (*pf_set_prefetching)(int p),
+                                         int      (*pf_get_pos)(void),
+                                         uint16_t (*pf_get_ip)(void),
+                                         int      (*pf_get_prefetching)(void),
+                                         int      (*pf_get_size)(void),
+                                         void     (*c_wait)(int c, int bus));
 
-extern void     prefetch_queue_set_pos(int pos);
-extern void     prefetch_queue_set_ip(uint16_t ip);
-extern void     prefetch_queue_set_prefetching(int p);
-extern int      prefetch_queue_get_pos(void);
-extern uint16_t prefetch_queue_get_ip(void);
-extern int      prefetch_queue_get_prefetching(void);
-extern int      prefetch_queue_get_size(void);
+extern void    wait_cycs(int c, int bus);
 
 #define prefetch_queue_set_suspended(s) prefetch_queue_set_prefetching(!s)
 #define prefetch_queue_get_suspended !prefetch_queue_get_prefetching

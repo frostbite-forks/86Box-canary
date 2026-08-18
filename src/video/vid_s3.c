@@ -3299,7 +3299,7 @@ s3_out(uint16_t addr, uint8_t val, void *priv)
                     s3_log("Write CRTC45=%02x.\n", val);
                     if ((s3->chip == S3_VISION964) || (s3->chip == S3_VISION968))
                         break;
-                    svga->hwcursor.ena = val & 1;
+                    svga->hwcursor.ena = val & 0x01;
                     break;
                 case 0x46:
                 case 0x47:
@@ -3309,9 +3309,15 @@ s3_out(uint16_t addr, uint8_t val, void *priv)
                 case 0x4d:
                 case 0x4e:
                 case 0x4f:
+                    ;
+                    uint16_t x_mask = 0x7ff;
+
+                    if (((s3->chip >= S3_86C928) && (s3->chip <= S3_86C805I) && ((svga->bpp == 15) || (svga->bpp == 16)) && s3->elsa_eeprom && (svga->hwcursor_draw != NULL)))
+                        x_mask = 0xfff;
+
                     if ((s3->chip == S3_VISION964) || (s3->chip == S3_VISION968))
                         break;
-                    svga->hwcursor.x = ((svga->crtc[0x46] << 8) | svga->crtc[0x47]) & 0x7ff;
+                    svga->hwcursor.x = ((svga->crtc[0x46] << 8) | svga->crtc[0x47]) & x_mask;
                     if (svga->bpp == 32)
                         svga->hwcursor.x >>= 1;
 
@@ -3330,6 +3336,8 @@ s3_out(uint16_t addr, uint8_t val, void *priv)
                         svga->hwcursor.x /= 3;
                     else if ((s3->chip <= S3_86C805) && s3->color_16bit)
                         svga->hwcursor.x >>= 1;
+
+                    s3_log("Write CRTC46=%02x, CRTC47=%02x, x=%04x.\n", svga->crtc[0x46], svga->crtc[0x47], svga->hwcursor.x);
                     break;
 
                 case 0x4a:
@@ -3596,7 +3604,9 @@ s3_in(uint16_t addr, void *priv)
                     }
                     break;
                 case 0x30:
-                    return ((svga->crtc[0x38] & 0xcc) != 0x48) ? 0xFF : s3->id; /*Chip ID*/
+                    temp = (((svga->crtc[0x38] & 0xcc) == 0x48) ||
+                            ((svga->crtc[0x39] & 0xe0) == 0xa0)) ? s3->id : 0xff; /*Chip ID*/
+                    return temp;
                 case 0x31:
                     return (svga->crtc[0x31] & 0xcf) | ((s3->ma_ext & 3) << 4);
                 case 0x35:
@@ -3977,9 +3987,9 @@ s3_recalctimings(svga_t *svga)
 
     if (enhanced_8bpp_modes) {
         s3_log("BPP=%d, pitch=%d, width=%02x, double?=%x, 16bit?=%d, highres?=%d, "
-               "attr=%02x, hdisp=%d, dotsperclock=%x, clksel=%x, clockmultiplier=%d, multiplexingrate=%d, mapenable=%x.\n", svga->bpp, s3->width, svga->crtc[0x50],
+               "attr=%02x, hdisp=%d, dotsperclock=%x, clksel=%x, clockmultiplier=%d, multiplexingrate=%d, mapenable=%x, ramdac type=%d, clksel=%d.\n", svga->bpp, s3->width, svga->crtc[0x50],
                svga->crtc[0x31] & 0x02, s3->color_16bit, s3->accel.advfunc_cntl & 0x04,
-               svga->attrregs[0x10] & 0x40, svga->hdisp, svga->dots_per_clock, clk_sel, svga->clock_multiplier, svga->multiplexing_rate, svga->mapping.enable);
+               svga->attrregs[0x10] & 0x40, svga->hdisp, svga->dots_per_clock, clk_sel, svga->clock_multiplier, svga->multiplexing_rate, svga->mapping.enable, s3->ramdac_type, clk_sel);
         switch (svga->bpp) {
             case 8:
                 svga->render = svga_render_8bpp_highres;
@@ -4199,10 +4209,8 @@ s3_recalctimings(svga_t *svga)
                                         svga->dots_per_clock >>= 1;
                                         svga->clock *= 2.0;
                                     } else {
-                                        if (clk_sel != 2) {
-                                            svga->hdisp >>= 1;
-                                            svga->dots_per_clock >>= 1;
-                                        }
+                                        svga->hdisp >>= 1;
+                                        svga->dots_per_clock >>= 1;
                                     }
                                 }
                                 break;
@@ -4406,10 +4414,8 @@ s3_recalctimings(svga_t *svga)
                                         svga->dots_per_clock >>= 1;
                                         svga->clock *= 2.0;
                                     } else {
-                                        if (clk_sel != 2) {
-                                            svga->hdisp >>= 1;
-                                            svga->dots_per_clock >>= 1;
-                                        }
+                                        svga->hdisp >>= 1;
+                                        svga->dots_per_clock >>= 1;
                                     }
                                 }
                                 break;
@@ -4803,12 +4809,18 @@ s3_recalctimings(svga_t *svga)
         }
     }
 
-    if ((s3->elsa_eeprom && (svga->bpp == 32)) ||
-        (s3->chip == S3_TRIO32) || (s3->chip == S3_TRIO64) || (s3->chip == S3_VISION864) || (s3->chip == S3_VISION868) || (s3->chip == S3_VISION968))
+    const int is_vga_mode = ((svga->bpp <= 8) || ((svga->gdcreg[5] & 0x60) <= 0x20));
+    if (!is_vga_mode && ((s3->elsa_eeprom && (svga->bpp == 32)) ||
+        (s3->chip == S3_TRIO32) || (s3->chip == S3_TRIO64) ||
+        (s3->chip == S3_VISION864) || (s3->chip == S3_VISION868) ||
+        (s3->chip == S3_VISION968)))
         svga->hoverride = 1;
-    else
+    else {
         svga->hoverride = 0;
-
+        if (((s3->chip == S3_TRIO32) || (s3->chip == S3_TRIO64) ||
+            (!s3->pci && (s3->chip == S3_VISION968))) && enhanced_8bpp_modes)
+            svga->hoverride = 1;
+    }
     if (svga->render == svga_render_2bpp_lowres)
         svga->render = svga_render_2bpp_s3_lowres;
     else if (svga->render == svga_render_2bpp_highres)
@@ -4818,8 +4830,9 @@ s3_recalctimings(svga_t *svga)
 static void
 s3_trio64v_recalctimings(svga_t *svga)
 {
-    s3_t *s3            = (s3_t *) svga->priv;
-    int         clk_sel = (svga->miscout >> 2) & 3;
+    s3_t *s3                  = (s3_t *) svga->priv;
+    int   clk_sel             = (svga->miscout >> 2) & 3;
+    int   enhanced_8bpp_modes = 0;
 
     if (!svga->scrblank && svga->attr_palette_enable && (svga->crtc[0x43] & 0x80)) {
         /* TODO: In case of bug reports, disable 9-dots-wide character clocks in graphics modes. */
@@ -5010,7 +5023,17 @@ s3_trio64v_recalctimings(svga_t *svga)
         svga->vram_display_mask = s3->vram_mask;
     }
 
-    svga->hoverride = 1;
+    enhanced_8bpp_modes = !!((svga->crtc[0x3a] & 0x10) && !svga->lowres);
+
+    const int is_vga_mode = ((svga->bpp <= 8) || ((svga->gdcreg[5] & 0x60) <= 0x20));
+    svga->hoverride = !is_vga_mode;
+
+    if (is_vga_mode) {
+        svga->hoverride = 0;
+        if (enhanced_8bpp_modes)
+            svga->hoverride = 1;
+    } else
+        svga->hoverride = 1;
 
     if (svga->render == svga_render_2bpp_lowres)
         svga->render = svga_render_2bpp_s3_lowres;
@@ -12504,7 +12527,7 @@ static const device_config_t s3_trio32_pci_config[] = {
             },
             {
                 .name          = "SPEA V7-Mirage P-32",
-                .internal_name = "spea_mercury32p_pci", /* TODO: to add migration */
+                .internal_name = "spea_mirage32p_pci", /* TODO: to add migration */
                 .bios_type     = BIOS_NORMAL,
                 .files_no      = 1,
                 .local         = S3_SPEA_TRIO32,

@@ -873,10 +873,17 @@ sb_ess_update_irq_drq_readback_regs(sb_dsp_t *dsp, bool legacy)
     ess_mixer_t *mixer = &ess->mixer_ess;
     uint8_t      t     = 0x00;
 
+    /* Bits 1-0 differ between the ES186x and the non-ISAPnP chips: On ES186x the
+       bits are part of the IRQ/DMA readout while on the non-ISAPnP chips these are
+       unused. The Synergy ViperMax DOS initialization utility relies on those bits
+       being cleared */
+
     /* IRQ control */
     if (legacy) {
         t |= 0x80;
     }
+    if (dsp->sb_irqnum != 0)
+        t |= 0x10;
     switch (dsp->sb_irqnum) {
         default:
             break;
@@ -885,13 +892,22 @@ sb_ess_update_irq_drq_readback_regs(sb_dsp_t *dsp, bool legacy)
             t |= 0x0;
             break;
         case 5:
-            t |= 0x5;
+            if (dsp->sb_subtype >= SB_SUBTYPE_ESS_ES1868)
+                t |= 0x5;
+            else
+                t |= 0x4;
             break;
         case 7:
-            t |= 0xA;
+            if (dsp->sb_subtype >= SB_SUBTYPE_ESS_ES1868)
+                t |= 0xA;
+            else
+                t |= 0x8;
             break;
         case 10:
-            t |= 0xF;
+            if (dsp->sb_subtype >= SB_SUBTYPE_ESS_ES1868)
+                t |= 0xF;
+            else
+                t |= 0xC;
             break;
     }
     ESSreg(0xB1) = (ESSreg(0xB1) & 0xF0) | t;
@@ -907,13 +923,22 @@ sb_ess_update_irq_drq_readback_regs(sb_dsp_t *dsp, bool legacy)
         default:
             break;
         case 0:
-            t |= 0x5;
+            if (dsp->sb_subtype >= SB_SUBTYPE_ESS_ES1868)
+                t |= 0x5;
+            else
+                t |= 0x4;
             break;
         case 1:
-            t |= 0xA;
+            if (dsp->sb_subtype >= SB_SUBTYPE_ESS_ES1868)
+                t |= 0xA;
+            else
+                t |= 0x8;
             break;
         case 3:
-            t |= 0xF;
+            if (dsp->sb_subtype >= SB_SUBTYPE_ESS_ES1868)
+                t |= 0xF;
+            else
+                t |= 0xC;
             break;
     }
     ESSreg(0xB2) = (ESSreg(0xB2) & 0xF0) | t;
@@ -928,7 +953,9 @@ sb_dsp_setirq(sb_dsp_t *dsp, int irq)
     if (IS_ESS(dsp)) {
         sb_ess_update_irq_drq_readback_regs(dsp, true);
 
-        ESSreg(0xB1) = (ESSreg(0xB1) & 0xEF) | 0x10;
+        ESSreg(0xB1) = (ESSreg(0xB1) & 0xEF);
+        if (dsp->sb_irqnum != 0)
+            ESSreg(0xB1) |= 0x10;
     }
 }
 
@@ -1749,8 +1776,14 @@ sb_exec_command(sb_dsp_t *dsp)
                    0x03 0x01 (Sound Blaster Pro compatibility) confirmed by both the
                    ES1888 datasheet and the probing of the real ES688 and ES1688 cards.
                  */
-                sb_add_data(dsp, 0x3);
-                sb_add_data(dsp, 0x1);
+                /* Some ES688/1688 ISA cards have a jumper to set DSP version 2.01 */
+                if (dsp->ess_dsp_v2_mode == 1) {
+                    sb_add_data(dsp, 0x2);
+                    sb_add_data(dsp, 0x1);
+                } else {
+                    sb_add_data(dsp, 0x3);
+                    sb_add_data(dsp, 0x1);
+                }
                 break;
             }
             if (IS_AZTECH(dsp)) {
@@ -2081,7 +2114,7 @@ sb_read(uint16_t addr, void *priv)
                     if (dsp->wb_full || (dsp->busy_count & 2))
                         dsp->wb_full = timer_is_enabled(&dsp->wb_timer);
 
-                    const uint8_t busy_flag   = dsp->wb_full ? 0x80 : 0x00;
+                    const uint8_t busy_flag   = (dsp->wb_full || (dsp->busy_count & 2)) ? 0x80 : 0x00;
                     const uint8_t data_rdy    = (dsp->sb_read_rp == dsp->sb_read_wp) ? 0x00 : 0x40;
                     const uint8_t fifo_full   = 0; /* Unimplemented */
                     const uint8_t fifo_empty  = 0; /* (this is for the 256-byte extended mode FIFO, */

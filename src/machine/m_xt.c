@@ -37,6 +37,7 @@
 #include <86box/serial.h>
 #include <86box/sio.h>
 #include <86box/ibm_5161.h>
+#include <86box/inboard386.h>
 #include <86box/io.h>
 #include <86box/isartc.h>
 #include <86box/keyboard.h>
@@ -141,6 +142,15 @@ static const device_config_t ibmpc_config[] = {
                 .size          = 40960,
                 .files         = { "roms/machines/diagnostic/xtramtest_8k.bin", "" }
             },
+            {
+                .name          = "WindsorPOST",
+                .internal_name = "diag_windsorpost",
+                .bios_type     = BIOS_NORMAL,
+                .files_no      = 1,
+                .local         = 0,
+                .size          = 40960,
+                .files         = { "roms/machines/diagnostic/windsorpost_8k.bin", "" }
+            },            
             { .files_no = 0 }
         }
     },
@@ -310,6 +320,15 @@ static const device_config_t ibmpc82_config[] = {
                 .local         = 0,
                 .size          = 40960,
                 .files         = { "roms/machines/diagnostic/xtramtest_8k.bin", "" }
+            },
+            {
+                .name          = "WindsorPOST",
+                .internal_name = "diag_windsorpost",
+                .bios_type     = BIOS_NORMAL,
+                .files_no      = 1,
+                .local         = 0,
+                .size          = 40960,
+                .files         = { "roms/machines/diagnostic/windsorpost_8k.bin", "" }
             },
             { .files_no = 0 }
         }
@@ -498,6 +517,15 @@ static const device_config_t ibmxt_config[] = {
                 .files         = { "roms/machines/diagnostic/xtramtest_32k.bin",
                                    "roms/machines/ibmxt/BIOS_5160_08NOV82_U19_5000027.BIN", "" }
             },
+            {
+                .name          = "WindsorPOST",
+                .internal_name = "diag_windsorpost",
+                .bios_type     = BIOS_NORMAL,
+                .files_no      = 1,
+                .local         = 0,
+                .size          = 40960,
+                .files         = { "roms/machines/diagnostic/windsorpost_8k.bin", "" }
+            },            
             { .files_no = 0 }
         }
     },
@@ -588,6 +616,143 @@ machine_ibmxt_init(const machine_t *model)
 
     if (enable_5161)
         device_add(&ibm_5161_device);
+
+    return ret;
+}
+
+/* IBM XT (1982) with an Intel Inboard 386/PC accelerator card fitted in place of the stock
+   8088 - same real BIOS ROM chips, same base XT platform, plus the Inboard's own wait-state/
+   A20/ROM-shadow hardware. */
+const device_t ibmxt_inboard386_device = {
+    .name          = "IBM XT (Inboard 386/PC)",
+    .internal_name = "ibmxt_inboard386",
+    .flags         = 0,
+    .local         = 0,
+    .init          = NULL,
+    .close         = NULL,
+    .reset         = NULL,
+    .available     = NULL,
+    .speed_changed = NULL,
+    .force_redraw  = NULL,
+    .config        = ibmxt_config /* Same real ROM chips - reuse the exact same BIOS selection. */
+};
+
+int
+machine_ibmxt_inboard386_init(const machine_t *model)
+{
+    int         ret = 0;
+    uint8_t     enable_5161;
+    uint8_t     enable_basic;
+    const char *fn;
+    const char *bios_sel;
+    uint16_t    offset = 0;
+    uint32_t    local  = 0;
+
+    /* No ROMs available. */
+    if (!device_available(model->device))
+        return ret;
+
+    device_context(model->device);
+    enable_5161  = machine_get_config_int("enable_5161");
+    enable_basic = machine_get_config_int("enable_basic");
+    bios_sel     = device_get_config_bios("bios");
+    fn           = device_get_bios_file(model->device, bios_sel, 0);
+    local        = device_get_bios_local(model->device, bios_sel);
+
+    if (local == 0) // Offset for stock roms
+        offset = 0x6000;
+    ret = bios_load_linear(fn, 0x000fe000, 65536, offset);
+
+    if (enable_basic && ret) {
+        if (local == 0) { // needed for stock roms
+            fn = device_get_bios_file(model->device, bios_sel, 0);
+            (void) bios_load_aux_linear(fn, 0x000f8000, 24576, 0);
+        }
+        fn = device_get_bios_file(model->device, bios_sel, 1);
+        /* On the real machine, the BASIC is repeated. */
+        (void) bios_load_aux_linear(fn, 0x000f0000, 8192, 0);
+        (void) bios_load_aux_linear(fn, 0x000f2000, 8192, 0);
+        (void) bios_load_aux_linear(fn, 0x000f4000, 8192, 0);
+        (void) bios_load_aux_linear(fn, 0x000f6000, 8192, 0);
+    }
+
+    /* The later (1986-dated) ROM revisions use two equal-sized 32KB chips that are BOTH
+       genuine, required system BIOS content - unlike the earlier 1982 ROM set above, where
+       the second file (5000027, 8KB) really is optional Cassette BASIC, correctly gated
+       behind enable_basic like every other ibmxt-family machine. Those 1986 ROMs' own POST
+       does a full 64KB checksum-to-zero self-test over F0000-FFFFF, and hangs if the second
+       chip is never loaded (bios_load_linear above only ever fills the *tail* of the buffer
+       per its own "prepare 64k rom, load N-byte bios at the end" semantics). Load files[1]
+       unconditionally, as real BIOS content rather than repeated BASIC, only for these two
+       entries. */
+    if (ret && ((strcmp(bios_sel, "ibm5160_050986") == 0) || (strcmp(bios_sel, "ibm5160_011086") == 0))) {
+        fn = device_get_bios_file(model->device, bios_sel, 1);
+        (void) bios_load_aux_linear(fn, 0x000f0000, 32768, 0);
+    }
+
+    device_context_restore();
+
+    if (bios_only || !ret)
+        return ret;
+
+    device_add(&kbc_xt_device);
+
+    machine_xt_common_init(model, 0);
+
+    if (enable_5161)
+        device_add(&ibm_5161_device);
+
+    device_add(&inboard386_xt_device); /* The Inboard 386/PC accelerator card itself. */
+
+    return ret;
+}
+
+/*
+ * IBM 3270 PC (model 5271).
+ *
+ * The planar is a stock 5160 -- these two ROMs are byte-identical to the
+ * 08NOV82 XT set -- and every 3270-specific part of the machine lives on the
+ * display adapter and its option ROMs.  So there is nothing to do here beyond
+ * the ordinary XT init plus the card itself.
+ *
+ * The keyboard adapter at ports 0x1B0-0x1B7 is kbc_3270pc_device.  A real 5271
+ * always has that card fitted -- it carries the option ROM the display adapter
+ * maps -- so the ROM never tests for its absence, and leaving the range
+ * undecoded used to read back 0xFF, which satisfies every ready/present bit it
+ * polls and then fails the data compares.
+ *
+ * POST 0302 still appears and is authentic: Elliott records that a 5271 with an
+ * ordinary XT keyboard reports it at every boot, and the 122-key 3270 keyboard
+ * is not emulated.  2801 likewise -- there is no Host Connect card.  Both are
+ * non-fatal; F1 resumes.
+ */
+int
+machine_xt_ibm3270pc_init(const machine_t *model)
+{
+    int ret;
+
+    ret = bios_load_linear("roms/machines/ibm3270pc/1501512.bin",
+                           0x000f8000, 65536, 0);
+    if (ret)
+        ret = bios_load_aux_linear("roms/machines/ibm3270pc/6359116.bin",
+                                   0x000f6000, 8192, 0);
+
+    /* The adapter and font ROMs are read by the display device with
+       rom_fopen(), which is not bios_only-aware, so gate on them here. */
+    if (ret && !device_available(&ibm3270pc_vid_device))
+        ret = 0;
+
+    if (bios_only || !ret)
+        return ret;
+
+    device_add(&kbc_xt_device);
+
+    machine_xt_common_init(model, 0);
+
+    device_add(&ibm3270pc_vid_device);
+    /* After machine_xt_common_init(), so the system PIT exists and PITCONST is
+       settled before the adapter's own 8254 is added. */
+    device_add(&kbc_3270pc_device);
 
     return ret;
 }
@@ -686,7 +851,15 @@ static const device_config_t ibmxt86_config[] = {
                 .size          = 65536,
                 .files         = { "roms/machines/diagnostic/xtramtest_32k.bin", "roms/machines/ibmxt86/BIOS_5160_09MAY86_U19_62X0819_68X4370_27256_F000.BIN", "" }
             },
-
+            {
+                .name          = "WindsorPOST",
+                .internal_name = "diag_windsorpost",
+                .bios_type     = BIOS_NORMAL,
+                .files_no      = 1,
+                .local         = 0,
+                .size          = 40960,
+                .files         = { "roms/machines/diagnostic/windsorpost_8k.bin", "" }
+            },
             { .files_no = 0 }
         },
     },

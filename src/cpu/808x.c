@@ -41,6 +41,7 @@
 #include <86box/plat_fallthrough.h>
 #include <86box/plat_unused.h>
 #include "vx0_biu.h"
+#include "808x_marty_86box.h"
 
 /* Is the CPU 8088 or 8086. */
 int is8086 = 0;
@@ -172,47 +173,48 @@ x808x_log(const char *fmt, ...)
 static void pfq_add(int c, int add);
 static void set_pzs(int bits);
 
-void
-prefetch_queue_set_pos(int pos)
+static void
+pfq_set_pos(int pos)
 {
     pfq_pos = pos;
 }
 
-void
-prefetch_queue_set_ip(uint16_t ip)
+static void
+pfq_set_ip(uint16_t ip)
 {
     pfq_ip = ip;
 }
 
 void
-prefetch_queue_set_prefetching(int p)
+pfq_set_prefetching(int p)
 {
     prefetching = p;
 }
 
 int
-prefetch_queue_get_pos(void)
+pfq_get_pos(void)
 {
     return pfq_pos;
 }
 
 uint16_t
-prefetch_queue_get_ip(void)
+pfq_get_ip(void)
 {
     return pfq_ip;
 }
 
 int
-prefetch_queue_get_prefetching(void)
+pfq_get_prefetching(void)
 {
     return prefetching;
 }
 
 int
-prefetch_queue_get_size(void)
+pfq_get_size(void)
 {
     return pfq_size;
 }
+
 static void set_if(int cond);
 
 uint16_t
@@ -239,9 +241,16 @@ fetch_and_bus(int c, int bus)
         /* Finish the current fetch, if any. */
         cycles -= ((4 - (biu_cycles & 3)) & 3);
         pfq_add((4 - (biu_cycles & 3)) & 3, 1);
+
+        int ref_cycs = 4;
+
+        if ((strcmp(machine_get_internal_name(), "ibmps2_m25") == 0) ||
+             (strcmp(machine_get_internal_name(), "ibmps2_m30") == 0))
+            ref_cycs = 9;
+
         /* Add 4 memory access cycles. */
-        cycles -= 4;
-        pfq_add(4, 0);
+        cycles -= ref_cycs;
+        pfq_add(ref_cycs, 0);
 
         refresh--;
     }
@@ -254,20 +263,21 @@ fetch_and_bus(int c, int bus)
 }
 
 static void
-wait_cycs(int c, int bus)
+i808x_wait(int c, int bus)
 {
-    if (is_new_biu)
-        wait_vx0(c);
-    else {
-        cycles -= c;
-        fetch_and_bus(c, bus);
-    }
+    cycles -= c;
+    fetch_and_bus(c, bus);
 }
 
 /* This is for external subtraction of cycles. */
 void
 sub_cycles(int c)
 {
+    if (m808x_86box_active()) {
+        m808x_86box_external_sub_cycles(c);
+        return;
+    }
+
     if (c <= 0)
         return;
 
@@ -297,19 +307,27 @@ resub_cycles(int old_cycles)
 static void
 cpu_io(int bits, int out, uint16_t port)
 {
+    int cycs = 4;
+
+    if (is_mazovia)
+        cycs = 5;
+    else if ((strcmp(machine_get_internal_name(), "ibmps2_m25") == 0) ||
+             (strcmp(machine_get_internal_name(), "ibmps2_m30") == 0))
+        cycs = 8;
+
     if (is_new_biu)
         cpu_io_vx0(bits, out, port);
     else {
         int old_cycles = cycles;
 
         if (out) {
-            wait_cycs(is_mazovia ? 5 : 4, 1);
+            wait_cycs(cycs, 1);
             if (bits == 16) {
                 if (is8086 && !(port & 1)) {
                     old_cycles = cycles;
                     outw(port, AX);
                 } else {
-                    wait_cycs(is_mazovia ? 5 : 4, 1);
+                    wait_cycs(cycs, 1);
                     old_cycles = cycles;
                     outb(port++, AL);
                     outb(port, AH);
@@ -319,13 +337,13 @@ cpu_io(int bits, int out, uint16_t port)
                 outb(port, AL);
             }
         } else {
-            wait_cycs(is_mazovia ? 5 : 4, 1);
+            wait_cycs(cycs, 1);
             if (bits == 16) {
                 if (is8086 && !(port & 1)) {
                     old_cycles = cycles;
                     AX         = inw(port);
                 } else {
-                    wait_cycs(is_mazovia ? 5 : 4, 1);
+                    wait_cycs(cycs, 1);
                     old_cycles = cycles;
                     AL         = inb(port++);
                     AH         = inb(port);
@@ -706,6 +724,15 @@ static void i8080_port_out(UNUSED(void* priv), uint8_t port, uint8_t val)
 void
 reset_808x(int hard)
 {
+    i808x_hook_prefetch_queue(pfq_set_pos, pfq_set_ip, pfq_set_prefetching,
+                              pfq_get_pos, pfq_get_ip, pfq_get_prefetching,
+                              pfq_get_size, i808x_wait);
+
+    if (m808x_86box_should_use()) {
+        m808x_86box_reset(hard);
+        return;
+    }
+
     is_new_biu = 0;
     biu_cycles = 0;
     in_rep     = 0;
@@ -766,6 +793,11 @@ set_ip(uint16_t new_ip)
 void
 refreshread(void)
 {
+    if (m808x_86box_active()) {
+        m808x_86box_refresh();
+        return;
+    }
+
     refresh++;
 }
 
@@ -3236,6 +3268,8 @@ execx86_instruction(void)
                 break;
             case 0xfa ... 0xfb:    /* CLISTI */
                 wait_cycs(1, 0);
+                if ((opcode & 1) && !(cpu_state.flags & I_FLAG))
+                    noint = 1;
                 set_if(opcode & 1);
                 break;
             case 0xfc ... 0xfd:    /* CLDSTD */
@@ -3349,6 +3383,11 @@ execx86_instruction(void)
 void
 execx86(int32_t cycs)
 {
+    if (m808x_86box_should_use()) {
+        execx86_new(cycs);
+        return;
+    }
+
     cycles += cycs;
 
     while (cycles > 0) {

@@ -1,4 +1,8 @@
+#ifdef USE_SDL2_LIB
 #include <SDL.h>
+#else
+#include <SDL3/SDL.h>
+#endif
 
 #include <stdlib.h>
 #include <string.h>
@@ -127,6 +131,8 @@ plat_get_string(int i)
             return "Unable to load CD-ROM image \"%s\".";
         case STRING_CDROM_LOAD_MDSX_ERROR:
             return "Unable to load image \"%s\": mdsx.so is missing, which is required for Daemon Tools MDS v2 and MDX image support.";
+        case STRING_CDROM_LOAD_AARU_ERROR:
+            return "Unable to load image \"%s\": libaaruformat.so is missing, which is required for Aaru format image support.";
         case STRING_CDROM_DVD_IN_CD_DRIVE:
             return "The DVD image \"%s\" has been inserted into a drive that does not support DVD media and will be ignored.";
         case STRING_CHARDEV_CONNECT_ERROR:
@@ -264,7 +270,7 @@ path_get_dirname(char *dest, const char *path)
 void
 plat_get_exe_name(char *s, int size)
 {
-    char *basepath = SDL_GetBasePath();
+    const char *basepath = SDL_GetBasePath();
 
     snprintf(s, size, "%s%s", basepath, basepath[strlen(basepath) - 1] == '/' ? EMU_NAME : "/" EMU_NAME);
 }

@@ -191,6 +191,7 @@ device_set_context(device_context_t *ctx, const device_t *dev, int inst)
         { .old = "IBM XT Model 286", .new = "IBM XT model 286" },
         { .old = "Packard Bell Legend 300SX", .new = "Packard Bell PB300" },
         { .old = "Packard Bell PB300/PB320", .new = "Packard Bell PB300" }, /* 6.0 pre-release */
+        { .old = "IBM XT (1982) w/ Intel Inboard 386/PC", .new = "IBM XT (Inboard 386/PC)" },
         { .old = "DataExpert SX495", .new = "DataExpert OPTI-495SX" },
         { .old = "Packard Bell PB410/PB410A/PB420/PB420T", .new = "Packard Bell PB410A" }, /* 6.0 pre-release */
         { .old = "Intel Premiere/PCI (Batman)", .new = "Intel Premiere/PCI" },
@@ -242,6 +243,7 @@ device_set_context(device_context_t *ctx, const device_t *dev, int inst)
         { .old = "Cirrus Logic GD5428 (MCA) (IBM SVGA Adapter/A)", .new = "Cirrus Logic GD5428 (MCA)" },
         { .old = "Cirrus Logic GD5426 (MCA) (Reply Video Adapter)", .new = "Cirrus Logic GD5426 (MCA)" },
         { .old = "3dfx Voodoo3 2000 (On-Board 8MB SGRAM)", .new = "3dfx Voodoo3 2000 (On-Board)" },
+        { .old = "Gravis/Synergy Vipermax", .new = "Synergy ViperMAX" },
         { 0 }
     };
 

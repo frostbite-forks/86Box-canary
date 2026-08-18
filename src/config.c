@@ -64,6 +64,7 @@
 #include <86box/hdc.h>
 #include <86box/hdc_ide.h>
 #include <86box/fdd.h>
+#include <86box/fdd_tape.h>
 #include <86box/fdd_audio.h>
 #include <86box/fdc_ext.h>
 #include <86box/gameport.h>
@@ -98,12 +99,13 @@ extern char gl3_shader_file[MAX_USER_SHADERS][512];
 extern char vk_shader_file[20][512];
 #endif
 
-static int   cx;
-static int   cy;
-static int   cw;
-static int   ch;
-static ini_t config;
-static ini_t global;
+static int      cx;
+static int      cy;
+static int      cw;
+static int      ch;
+static ini_t    config;
+static ini_t    global;
+static mutex_t *config_mutex = NULL;
 
 #ifdef ENABLE_CONFIG_LOG
 int config_do_log = ENABLE_CONFIG_LOG;
@@ -152,6 +154,8 @@ load_global_emulator(void)
     color_scheme  = ini_section_get_int(cat, "color_scheme", 0);
 
     vmm_disabled = ini_section_get_int(cat, "vmm_disabled", 0);
+
+    chd_precache_level = ini_section_get_int(cat, "chd_precache_level", 0);
 
     p = ini_section_get_string(cat, "vmm_path", NULL);
     if (p != NULL) {
@@ -390,6 +394,8 @@ load_general(void)
         strncpy(uuid, p, sizeof(uuid) - 1);
     else
         strncpy(uuid, "", sizeof(uuid) - 1);
+
+    gdbstub_port = ini_section_get_int(cat, "gdbstub_port", 12345);
 }
 
 /* Load monitor section. */
@@ -776,6 +782,18 @@ load_input_devices(void)
         mouse_type = mouse_get_from_internal_name(p);
     else
         mouse_type = 0;
+
+    // Migration.
+    if (tablet_get_from_internal_name(p) && mouse_type == 0)
+        ini_section_set_string(cat, "tablet_type", p);
+
+    p = ini_section_get_string(cat, "tablet_type", NULL);
+    if (p != NULL)
+        tablet_type = tablet_get_from_internal_name(p);
+    else
+        tablet_type = 0;
+
+    mouse_input_mode_initial = ini_section_get_int(cat, "mouse_input_mode_initial", 0);
 
     uint8_t joy_insn = 0;
     p = ini_section_get_string(cat, "joystick_type", NULL);
@@ -1439,6 +1457,25 @@ load_storage_controllers(void)
     p = ini_section_get_string(cat, "cdrom_interface", NULL);
     if (p != NULL)
         cdrom_interface_current = cdrom_interface_get_from_internal_name(p);
+
+    fdd_tape_enabled = !!ini_section_get_int(cat, "floppy_tape_enabled", 0);
+
+    fdd_tape_unit = ini_section_get_int(cat, "floppy_tape_unit", 1);
+    if ((fdd_tape_unit < 0) || (fdd_tape_unit >= FDD_NUM))
+        fdd_tape_unit = 1;
+
+    memset(fdd_tape_fn, 0x00, sizeof(fdd_tape_fn));
+    p = ini_section_get_string(cat, "floppy_tape_file", "");
+    if ((p != NULL) && (p[0] != 0x00)) {
+        if (load_image_file(fdd_tape_fn, p, NULL))
+            fatal("Configuration: Length of floppy_tape_file is more than %i\n",
+                  MAX_IMAGE_PATH_LEN - 1);
+    }
+
+    if (!fdd_tape_enabled) {
+        ini_section_delete_var(cat, "floppy_tape_unit");
+        ini_section_delete_var(cat, "floppy_tape_file");
+    }
 
     if (machine_has_bus(machine, MACHINE_BUS_CASSETTE))
         cassette_enable = !!ini_section_get_int(cat, "cassette_enabled", 0);
@@ -2720,6 +2757,10 @@ config_load(void)
         for (i = 0; i < ISAMEM_MAX; i++)
             isamem_type[i] = 0;
 
+        fdd_tape_enabled = 0;
+        fdd_tape_unit    = 1;
+        memset(fdd_tape_fn, 0x00, sizeof(fdd_tape_fn));
+
         cassette_enable = 1;
         memset(cassette_fname, 0x00, sizeof(cassette_fname));
         memcpy(cassette_mode, "load", strlen("load") + 1);
@@ -2728,6 +2769,8 @@ config_load(void)
         cassette_append       = 0;
         cassette_pcm          = 0;
         cassette_ui_writeprot = 0;
+
+        gdbstub_port          = 12345;
 
         config_log("VM config file not present or invalid!\n");
     } else {
@@ -2772,6 +2815,11 @@ config_load(void)
 
         config_log("VM config loaded.\n\n");
     }
+
+    /* Protecet concurrent config_save() calls from the emulation
+       thread and UI thread. */
+    if (config_mutex == NULL)
+        config_mutex = thread_create_mutex();
 
     /* Mark the configuration as changed. */
     config_changed = 1;
@@ -2826,6 +2874,12 @@ save_global_emulator(void)
         ini_section_set_int(cat, "confirm_save", confirm_save);
     else
         ini_section_delete_var(cat, "confirm_save");
+
+
+    if (chd_precache_level)
+        ini_section_set_int(cat, "chd_precache_level", chd_precache_level);
+    else
+        ini_section_delete_var(cat, "chd_precache_level");
 
     if (vmm_disabled != 0)
         ini_section_set_int(cat, "vmm_disabled", vmm_disabled);
@@ -3081,10 +3135,15 @@ save_general(void)
     else
         ini_section_delete_var(cat, "emu_build_num");
 
-  if (strnlen(uuid, sizeof(uuid) - 1) > 0)
+    if (strnlen(uuid, sizeof(uuid) - 1) > 0)
         ini_section_set_string(cat, "uuid", uuid);
     else
         ini_section_delete_var(cat, "uuid");
+
+    if (gdbstub_port != 12345)
+        ini_section_delete_var(cat, "gdbstub_port");
+    else
+        ini_section_set_int(cat, "gdbstub_port", gdbstub_port);
 
     ini_delete_section_if_empty(config, cat);
 }
@@ -3278,6 +3337,8 @@ save_input_devices(void)
 
     ini_section_set_string(cat, "mouse_type", mouse_get_internal_name(mouse_type));
 
+    ini_section_set_string(cat, "tablet_type", tablet_get_internal_name(tablet_type));
+
     uint8_t joy_insn = 0;
     if (!joystick_type[joy_insn]) {
         ini_section_delete_var(cat, "joystick_type");
@@ -3341,6 +3402,11 @@ save_input_devices(void)
         ini_section_set_int(cat, "tablet_tool_type", tablet_tool_type);
     else
         ini_section_delete_var(cat, "tablet_tool_type");
+
+    if (mouse_input_mode_initial != 0)
+        ini_section_set_int(cat, "mouse_input_mode_initial", mouse_input_mode_initial);
+    else
+        ini_section_delete_var(cat, "mouse_input_mode_initial");
 
     ini_delete_section_if_empty(config, cat);
 }
@@ -3735,6 +3801,20 @@ save_storage_controllers(void)
     else
         ini_section_set_string(cat, "cdrom_interface",
                                cdrom_interface_get_internal_name(cdrom_interface_current));
+
+    if (fdd_tape_enabled == 0) {
+        ini_section_delete_var(cat, "floppy_tape_enabled");
+        ini_section_delete_var(cat, "floppy_tape_unit");
+        ini_section_delete_var(cat, "floppy_tape_file");
+    } else {
+        ini_section_set_int(cat, "floppy_tape_enabled", fdd_tape_enabled);
+        ini_section_set_int(cat, "floppy_tape_unit", fdd_tape_unit);
+
+        if (strlen(fdd_tape_fn) == 0)
+            ini_section_delete_var(cat, "floppy_tape_file");
+        else
+            save_image_file(cat, "floppy_tape_file", fdd_tape_fn);
+    }
 
     if (cassette_enable == 0)
         ini_section_delete_var(cat, "cassette_enabled");
@@ -4376,6 +4456,9 @@ config_save_global(void)
 void
 config_save(void)
 {
+    if (config_mutex)
+        thread_wait_mutex(config_mutex);
+
     save_general();                 /* General */
     for (uint8_t i = 0; i < MONITORS_NUM; i++)
         save_monitor(i);            /* Monitors */
@@ -4399,6 +4482,9 @@ config_save(void)
     ini_write(config, cfg_path);
 
     config_save_global();
+
+    if (config_mutex)
+        thread_release_mutex(config_mutex);
 }
 
 ini_t

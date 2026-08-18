@@ -67,11 +67,14 @@ msgstr "Re&nderer"
 msgid "&Qt (Software)"
 msgstr "&Qt (programowy)"
 
-msgid "Open&GL (3.0 Core)"
-msgstr "Open&GL (3.0 Core)"
+msgid "Open&GL"
+msgstr "Open&GL"
 
-msgid "&VNC"
-msgstr "&VNC"
+msgid "&Vulkan"
+msgstr "&Vulkan"
+
+msgid "V&NC"
+msgstr "V&NC"
 
 msgid "Specify &dimensions…"
 msgstr "Określ wymiary…"
@@ -421,7 +424,7 @@ msgstr "Włączona (UTC)"
 msgid "Use the 486 interpreter for 286 and 386 processors"
 msgstr "Użyj interpretera 486 dla procesorów 286 i 386"
 
-msgid "Dynamic Recompiler"
+msgid "Dynamic recompiler"
 msgstr "Dynamiczny rekompilator"
 
 msgid "CPU frame size"
@@ -454,6 +457,9 @@ msgstr "Grafika XGA"
 msgid "IBM PS/55 Display Adapter Graphics"
 msgstr "Karta graficzna IBM PS/55"
 
+msgid "SCSI:"
+msgstr "SCSI:"
+
 msgid "Voodoo:"
 msgstr "Voodoo:"
 
@@ -468,6 +474,21 @@ msgstr "Mysz:"
 
 msgid "Mouse"
 msgstr "Mysz"
+
+msgid "&Mouse"
+msgstr "&Mysz"
+
+msgid "Tablet:"
+msgstr ""
+
+msgid "Tablet"
+msgstr ""
+
+msgid "&Tablet"
+msgstr ""
+
+msgid "Tablet (&Crosshair)"
+msgstr ""
 
 msgid "Joystick:"
 msgstr "Joystick:"
@@ -829,6 +850,9 @@ msgstr "Ekran"
 msgid "Input devices"
 msgstr "Urządzenia wejściowe"
 
+msgid "Input &device"
+msgstr ""
+
 msgid "Sound"
 msgstr "Dźwięk"
 
@@ -837,6 +861,9 @@ msgstr "Sieć"
 
 msgid "Ports (COM & LPT)"
 msgstr "Porty (COM & LPT)"
+
+msgid "Port"
+msgstr ""
 
 msgid "Ports"
 msgstr "Porty"
@@ -1243,6 +1270,9 @@ msgstr "Nie udało się otworzyć wybranego pliku konfiguracyjnego do odczytu: %
 msgid "Use regular expressions in search box"
 msgstr "Użyj wyrażeń regularnych w polu wyszukiwania"
 
+msgid "Delete virtual machines to Recycle Bin"
+msgstr ""
+
 msgid "%n machine(s) are currently active. Are you sure you want to exit the VM manager anyway?"
 msgid_plural "%n machines are currently active. Are you sure you want to exit the VM manager anyway?"
 msgstr[0] "%n maszyna jest obecnie aktywna. Czy mimo to chcesz wyjść z menedżera maszyn wirtualnych?"
@@ -1417,8 +1447,11 @@ msgstr "Zabicie maszyny wirtualnej może spowodować utratę danych. Zrób to ty
 msgid "&Delete"
 msgstr "&Usuń"
 
-msgid "Do you really want to delete the virtual machine \"%1\" and all its files? This action cannot be undone!"
-msgstr "Czy na pewno chcesz usunąć maszynę wirtualną „%1” i jej wszystkie pliki? Tej operacji nie można cofnąć!"
+msgid "Do you really want to delete the virtual machine \"%1\" and all its files?"
+msgstr "Czy na pewno chcesz usunąć maszynę wirtualną „%1” i jej wszystkie pliki?"
+
+msgid "This action cannot be undone!"
+msgstr "Tej operacji nie można cofnąć!"
 
 msgid "Show &config file"
 msgstr "&Pokaż plik konfiguracyjny"
@@ -2238,6 +2271,9 @@ msgstr "Numer seryjny"
 msgid "Host ID"
 msgstr "Identyfikator hosta"
 
+msgid "Host"
+msgstr ""
+
 msgid "FDC Address"
 msgstr "Adres FDC"
 
@@ -2667,6 +2703,18 @@ msgstr "Rozszerzony kolor - tryb zwykły (5154/ECD)"
 msgid "Enhanced Color - Enhanced Mode (5154/ECD)"
 msgstr "Rozszerzony kolor - tryb rozszerzony (5154/ECD)"
 
+msgid "IBM 8507 (1024x768, Monochrome)"
+msgstr "IBM 8507 (1024x768, monochromatyczny)"
+
+msgid "IBM 8514 (1024x768, Color)"
+msgstr "IBM 8514 (1024x768, kolor)"
+
+msgid "IBM 8503 (640x480, Monochrome)"
+msgstr "IBM 8503 (640x480, monochromatyczny)"
+
+msgid "IBM 8512/13 (640x480, Color)"
+msgstr "IBM 8512/13 (640x480, kolor)"
+
 msgid "Green"
 msgstr "Zielony"
 
@@ -2919,6 +2967,9 @@ msgstr "Pytaj o potwierdzenie przed twardym resetem"
 msgid "Ask for confirmation before quitting"
 msgstr "Pytaj o potwierdzenie przed wyjściem"
 
+msgid "Precache CHD files into memory"
+msgstr ""
+
 msgid "Options"
 msgstr "Opcje"
 
@@ -2930,6 +2981,24 @@ msgstr "Model:"
 
 msgid "Failed to initialize Vulkan renderer."
 msgstr "Nie udało się zainicjować renderera Vulkan."
+
+msgid "Failed to create Vulkan 1.3 instance."
+msgstr ""
+
+msgid "No usable Vulkan physical devices found."
+msgstr ""
+
+msgid "No Vulkan-capable physical devices found."
+msgstr ""
+
+msgid "librashader not found. Shaders will not be available."
+msgstr ""
+
+msgid "Vulkan device lost."
+msgstr ""
+
+msgid "Vulkan surface lost."
+msgstr ""
 
 msgid "GLSL Error"
 msgstr "Błąd GLSL"
@@ -2951,6 +3020,9 @@ msgstr "Menedżer shaderów"
 
 msgid "Shader Configuration"
 msgstr "Konfiguracja shadera"
+
+msgid "GPU:"
+msgstr ""
 
 msgid "Add"
 msgstr "Dodaj"
@@ -3225,6 +3297,12 @@ msgstr "&Przewiń do przodu"
 msgid "Fast forward"
 msgstr "Przewiń do przodu"
 
+msgid "&Non-maskable interrupt"
+msgstr ""
+
+msgid "Non-maskable interrupt"
+msgstr ""
+
 msgid "To change the system directory, stop all running machines."
 msgstr "Aby zmienić katalog systemowy, zatrzymaj wszystkie działające maszyny."
 
@@ -3256,6 +3334,9 @@ msgid "Unable to load image \"%s\": %1 is missing, which is required for Daemon 
 msgstr ""
 "Nie udało się wczytać obrazu „%s”: brakuje %1, potrzebnego do obsługi "
 "obrazów Daemon Tools MDS v2 i MDX."
+
+msgid "Unable to load image \"%s\": %1 is missing, which is required for Aaru format image support."
+msgstr ""
 
 msgid "The DVD image \"%s\" has been inserted into a drive that does not support DVD media and will be ignored."
 msgstr ""
@@ -3402,3 +3483,9 @@ msgstr "938 (chiński uproszczony)"
 
 msgid "Sample rate:"
 msgstr "Częstotliwość próbkowania:"
+
+msgid "CGA lightpen"
+msgstr ""
+
+msgid "Luminance threshold (%)"
+msgstr ""
