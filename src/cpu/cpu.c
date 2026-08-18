@@ -425,6 +425,8 @@ cpu_is_eligible(const cpu_family_t *cpu_family, int cpu, int machine)
         packages |= CPU_PKG_SOCKET1;
     else if (packages & CPU_PKG_SLOT1)
         packages |= CPU_PKG_SOCKET370 | CPU_PKG_SOCKET8;
+    else if (packages & CPU_PKG_SOCKET423)
+        packages |= CPU_PKG_SOCKET478;
 
     /* Package type. */
     if (!(cpu_family->package & packages))
@@ -4464,6 +4466,8 @@ pentium_invalid_rdmsr:
                             EAX |= (1 << 18);
                     }
                     break;
+                case 0x2b:
+                    break;
                 /* Unknown */
                 case 0x32:
                     if (cpu_s->cpu_type == CPU_PENTIUMPRO)
@@ -4771,6 +4775,8 @@ i686_invalid_rdmsr:
                 case 0x2a:
                     EAX = 0xc4000000;
                     EDX = 0;
+                    break;
+                case 0x2b:
                     break;
                 /* BIOS_UPDT_TRIG - BIOS Update Trigger */
                 case 0x79:
@@ -5775,6 +5781,8 @@ pentium_invalid_wrmsr:
                 /* EBL_CR_POWERON - Processor Hard Power-On Configuration */
                 case 0x2a:
                     break;
+                case 0x2b:
+                    break;
                 /* Unknown */
                 case 0x32:
                     if (cpu_s->cpu_type == CPU_PENTIUMPRO)
@@ -6063,6 +6071,8 @@ i686_invalid_wrmsr:
                     break;
                 /* EBL_CR_POWERON - Processor Hard Power-On Configuration */
                 case 0x2a:
+                    break;
+                case 0x2b:
                     break;
                 /* TEST_CTL - Test Control Register */
                 case 0x33:

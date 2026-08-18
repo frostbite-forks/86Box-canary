@@ -935,6 +935,8 @@ extern int cpu_override_interpreter;
 
 extern int is_lock_legal(uint32_t fetchdat);
 
+extern void cpu_INVD(uint8_t wb);
+
 extern void     (*prefetch_queue_set_pos)(int pos);
 extern void     (*prefetch_queue_set_ip)(uint16_t ip);
 extern void     (*prefetch_queue_set_prefetching)(int p);
