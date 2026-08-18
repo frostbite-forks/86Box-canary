@@ -6666,7 +6666,10 @@ static void
 gf_hwcursor_draw(svga_t *svga, int dline)
 {
     geforce_t *gf   = (geforce_t *) svga->priv;
-    int        line = (dline - svga->hwcursor_latch.y) + svga->hwcursor_latch.yoff;
+    /* svga_poll passes a line that already includes the overscan offset, so
+       derive the cursor row from the remaining-lines counter instead (it is
+       decremented after this callback returns). */
+    int        line = svga->hwcursor_latch.cur_ysize - svga->hwcursor_on; /* == yoff on the first line */
     int        size = gf->hw_cursor.size;
     int        x_off = svga->hwcursor_latch.x;
     int        row;
