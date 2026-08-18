@@ -212,6 +212,7 @@ video_cards[] = {
 #endif /*USE_G100 */
     { .device = &s3_trio3d2x_agp_device,                        .flags = VIDEO_FLAG_TYPE_NONE      },
     { .device = &s3_virge_gx2_agp_device,                       .flags = VIDEO_FLAG_TYPE_NONE      },
+    { .device = &geforce3_ti500_agp_device,                     .flags = VIDEO_FLAG_TYPE_NONE      },
 #ifdef USE_NV3
     { .device = &riva128_pci_device,                            .flags = VIDEO_FLAG_TYPE_NONE },
     { .device = &rivatnt_pci_device,                            .flags = VIDEO_FLAG_TYPE_NONE },

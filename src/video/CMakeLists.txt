@@ -149,6 +149,9 @@ add_library(vid OBJECT
 
     vid_riva128.c
     vid_rivatnt.c
+
+    # NVIDIA GeForce3 Ti 500 (NV20)
+    vid_geforce.c
 )
 
 if(CMAKE_SYSTEM_NAME STREQUAL "FreeBSD")
