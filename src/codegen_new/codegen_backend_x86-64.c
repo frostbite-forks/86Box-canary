@@ -25,6 +25,9 @@
 #    if defined WIN32 || defined _WIN32 || defined _WIN32
 #        include <windows.h>
 #    endif
+#    if defined _MSC_VER
+#        include <intrin.h>
+#    endif
 #    include <string.h>
 
 void *codegen_mem_load_byte;
@@ -43,6 +46,8 @@ void *codegen_mem_store_double;
 
 void *codegen_gpf_rout;
 void *codegen_exit_rout;
+
+uint64_t codegen_host_cpu_features;
 
 host_reg_def_t codegen_host_reg_list[CODEGEN_HOST_REGS] = {
   /*Note: while EAX and EDX are normally volatile registers under x86
@@ -71,6 +76,83 @@ host_reg_def_t codegen_host_fp_reg_list[CODEGEN_HOST_FP_REGS] = {
     { REG_XMM4, HOST_REG_FLAG_VOLATILE},
     { REG_XMM5, HOST_REG_FLAG_VOLATILE}
 };
+
+static void
+host_cpuid(uint32_t leaf, uint32_t subleaf, uint32_t *eax, uint32_t *ebx, uint32_t *ecx, uint32_t *edx)
+{
+#    if defined(__GNUC__) || defined(__clang__)
+    __asm__ volatile(
+        "cpuid"
+        : "=a"(*eax), "=b"(*ebx), "=c"(*ecx), "=d"(*edx)
+        : "a"(leaf), "c"(subleaf));
+#    else
+    *eax = *ebx = *ecx = *edx = 0;
+#    endif
+}
+
+static uint64_t
+host_xgetbv(uint32_t xcr)
+{
+#    if defined(__GNUC__) || defined(__clang__)
+    uint32_t eax, edx;
+
+    __asm__ volatile(
+        "xgetbv"
+        : "=a"(eax), "=d"(edx)
+        : "c"(xcr));
+    return ((uint64_t) edx << 32) | eax;
+#    else
+    return 0;
+#    endif
+}
+
+static uint64_t
+detect_host_cpu_features(void)
+{
+    uint64_t features = 0;
+    uint32_t max_leaf;
+    uint32_t eax, ebx, ecx, edx;
+    int      os_avx, os_avx512;
+
+    host_cpuid(0, 0, &max_leaf, &ebx, &ecx, &edx);
+
+    if (max_leaf < 1)
+        return 0;
+
+    host_cpuid(1, 0, &eax, &ebx, &ecx, &edx);
+
+    if (ecx & (1U << 0))
+        features |= CODEGEN_HOST_CPU_FEATURE_SSE3;
+    if (ecx & (1U << 9))
+        features |= CODEGEN_HOST_CPU_FEATURE_SSSE3;
+    if (ecx & (1U << 19))
+        features |= CODEGEN_HOST_CPU_FEATURE_SSE4_1;
+    if (ecx & (1U << 20))
+        features |= CODEGEN_HOST_CPU_FEATURE_SSE4_2;
+
+    os_avx = ((ecx & ((1U << 27) | (1U << 28))) == ((1U << 27) | (1U << 28))) &&
+             ((host_xgetbv(0) & 0x6) == 0x6);
+    if (os_avx)
+        features |= CODEGEN_HOST_CPU_FEATURE_AVX;
+
+    os_avx512 = os_avx && ((host_xgetbv(0) & 0xe0) == 0xe0);
+
+    if (max_leaf >= 7) {
+        host_cpuid(7, 0, &eax, &ebx, &ecx, &edx);
+        if (ebx & (1U << 3))
+            features |= CODEGEN_HOST_CPU_FEATURE_BMI1;
+        if (ebx & (1U << 8))
+            features |= CODEGEN_HOST_CPU_FEATURE_BMI2;
+        if (os_avx && (ebx & (1U << 5)))
+            features |= CODEGEN_HOST_CPU_FEATURE_AVX2;
+        if (os_avx512 && (ebx & (0xd003U << 16)))
+            features |= CODEGEN_HOST_CPU_FEATURE_AVX512;
+    }
+
+    codegen_host_cpu_features = features;
+
+    return features;
+}
 
 static void
 build_load_routine(codeblock_t *block, int size, int is_float)
@@ -263,30 +345,32 @@ build_store_routine(codeblock_t *block, int size, int is_float)
 static void
 build_loadstore_routines(codeblock_t *block)
 {
-    codegen_mem_load_byte = &codeblock[block_current].data[block_pos];
+    /* Helper emission may advance to another allocator block, so always use
+       block_write_data rather than the first block's data pointer. */
+    codegen_mem_load_byte = &block_write_data[block_pos];
     build_load_routine(block, 1, 0);
-    codegen_mem_load_word = &codeblock[block_current].data[block_pos];
+    codegen_mem_load_word = &block_write_data[block_pos];
     build_load_routine(block, 2, 0);
-    codegen_mem_load_long = &codeblock[block_current].data[block_pos];
+    codegen_mem_load_long = &block_write_data[block_pos];
     build_load_routine(block, 4, 0);
-    codegen_mem_load_quad = &codeblock[block_current].data[block_pos];
+    codegen_mem_load_quad = &block_write_data[block_pos];
     build_load_routine(block, 8, 0);
-    codegen_mem_load_single = &codeblock[block_current].data[block_pos];
+    codegen_mem_load_single = &block_write_data[block_pos];
     build_load_routine(block, 4, 1);
-    codegen_mem_load_double = &codeblock[block_current].data[block_pos];
+    codegen_mem_load_double = &block_write_data[block_pos];
     build_load_routine(block, 8, 1);
 
-    codegen_mem_store_byte = &codeblock[block_current].data[block_pos];
+    codegen_mem_store_byte = &block_write_data[block_pos];
     build_store_routine(block, 1, 0);
-    codegen_mem_store_word = &codeblock[block_current].data[block_pos];
+    codegen_mem_store_word = &block_write_data[block_pos];
     build_store_routine(block, 2, 0);
-    codegen_mem_store_long = &codeblock[block_current].data[block_pos];
+    codegen_mem_store_long = &block_write_data[block_pos];
     build_store_routine(block, 4, 0);
-    codegen_mem_store_quad = &codeblock[block_current].data[block_pos];
+    codegen_mem_store_quad = &block_write_data[block_pos];
     build_store_routine(block, 8, 0);
-    codegen_mem_store_single = &codeblock[block_current].data[block_pos];
+    codegen_mem_store_single = &block_write_data[block_pos];
     build_store_routine(block, 4, 1);
-    codegen_mem_store_double = &codeblock[block_current].data[block_pos];
+    codegen_mem_store_double = &block_write_data[block_pos];
     build_store_routine(block, 8, 1);
 }
 
@@ -298,13 +382,15 @@ codegen_backend_init(void)
     uint8_t      large_block = 0;
     uint8_t      large_hash = 0;
 
+    codegen_host_cpu_features = detect_host_cpu_features();
+    
     codeblock      = plat_mmap(BLOCK_SIZE * sizeof(codeblock_t), 0, &large_block);
-    codeblock_hash = plat_mmap(HASH_SIZE * sizeof(codeblock_t *), 0, &large_hash);
+    codeblock_hash = plat_mmap(HASH_SIZE * CODEBLOCK_HASH_WAYS * sizeof(uint16_t), 0, &large_hash);
 
     if (large_block)
         pclog("Allocated %llu bytes of large pages for codeblock pointers\n", BLOCK_SIZE * sizeof(codeblock_t));
     if (large_hash)
-        pclog("Allocated %llu bytes of large pages for codeblock hashes\n", HASH_SIZE * sizeof(codeblock_t *));
+        pclog("Allocated %llu bytes of large pages for codeblock hashes\n", HASH_SIZE * CODEBLOCK_HASH_WAYS * sizeof(uint16_t));
 
     for (c = 0; c < BLOCK_SIZE; c++)
         codeblock[c].valid = 0;
@@ -317,7 +403,7 @@ codegen_backend_init(void)
     block_write_data                        = codeblock[block_current].data;
     build_loadstore_routines(&codeblock[block_current]);
 
-    codegen_gpf_rout = &codeblock[block_current].data[block_pos];
+    codegen_gpf_rout = &block_write_data[block_pos];
 #    if _WIN64
     host_x86_XOR32_REG_REG(block, REG_ECX, REG_ECX);
     host_x86_XOR32_REG_REG(block, REG_EDX, REG_EDX);
@@ -326,7 +412,7 @@ codegen_backend_init(void)
     host_x86_XOR32_REG_REG(block, REG_ESI, REG_ESI);
 #    endif
     host_x86_CALL(block, (void *) x86gpf);
-    codegen_exit_rout = &codeblock[block_current].data[block_pos];
+    codegen_exit_rout = &block_write_data[block_pos];
     host_x86_ADD64_REG_IMM(block, REG_RSP, 0x58);
     host_x86_POP(block, REG_R15);
     host_x86_POP(block, REG_R14);
