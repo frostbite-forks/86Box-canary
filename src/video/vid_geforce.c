@@ -3014,6 +3014,12 @@ gf_normal_to_view(gf_channel_t *ch, const float n[3], float nt[3])
 /*  3D: render thread work queue                                              */
 /* -------------------------------------------------------------------------- */
 
+#if defined(__GNUC__) || defined(__clang__)
+#    define GF_BARRIER() __sync_synchronize()
+#else
+#    define GF_BARRIER() do { } while (0)
+#endif
+
 #define GF_TRI_ENTRIES(gf, t) ((gf)->tri_write_idx - (gf)->tri_read_idx[t])
 #define GF_TRI_EMPTY(gf, t)   ((gf)->tri_read_idx[t] == (gf)->tri_write_idx)
 #define GF_TRI_FULL(gf, t)    (GF_TRI_ENTRIES(gf, t) >= GF_TRI_RING_SIZE)
@@ -3148,6 +3154,7 @@ gf_tri_commit(geforce_t *gf, gf_channel_t *ch, gf_tri_t *tri)
 
     tri->rs_slot                        = ch->rs_slot;
     gf->rs_ring[ch->rs_slot].last_tri   = gf->tri_write_idx;
+    GF_BARRIER(); /* release: publish the entry (and its state snapshot) before the index */
     gf->tri_write_idx++;
     for (int t = 0; t < gf->render_threads; t++) {
         if (GF_TRI_ENTRIES(gf, t) < 4)
@@ -3636,8 +3643,11 @@ gf_render_thread_common(void *param, int thread)
 
         gf->render_busy[thread] = 1;
         while (gf->render_thread_run && !GF_TRI_EMPTY(gf, thread)) {
-            const gf_tri_t     *tri = &gf->tri_ring[gf->tri_read_idx[thread] & GF_TRI_RING_MASK];
-            const gf_rstate_t  *rs  = &gf->rs_ring[tri->rs_slot].rs;
+            const gf_tri_t     *tri;
+            const gf_rstate_t  *rs;
+            GF_BARRIER(); /* acquire: the entry was fully written before tri_write_idx moved */
+            tri = &gf->tri_ring[gf->tri_read_idx[thread] & GF_TRI_RING_MASK];
+            rs  = &gf->rs_ring[tri->rs_slot].rs;
 
             if (tri->type == GF_WORK_TRIANGLE)
                 gf_d3d_raster_triangle(gf, rs, tri, thread, gf->render_threads);
@@ -6507,6 +6517,7 @@ static void
 gf_fifo_process_channel(geforce_t *gf, uint32_t chid)
 {
     uint32_t      oldchid;
+    uint32_t      get;
     gf_channel_t *ch;
 
     if (gf->fifo_wait)
@@ -6545,42 +6556,40 @@ gf_fifo_process_channel(geforce_t *gf, uint32_t chid)
         return;
     }
     ch = &gf->chs[chid];
-    while (gf->fifo_cache1_dma_get != gf->fifo_cache1_dma_put) {
-        uint32_t word = gf_dma_read32(gf, gf->fifo_cache1_dma_instance << 4, gf->fifo_cache1_dma_get);
+    get = gf->fifo_cache1_dma_get;
+    while (get != gf->fifo_cache1_dma_put) {
+        uint32_t word       = gf_dma_read32(gf, gf->fifo_cache1_dma_instance << 4, get);
+        int      cmd_result = 0;
+
         if (ch->dma_state.mcnt) {
-            /* DMA_GET only advances once the method has actually been executed, so
-               a driver polling GET never observes the engine as being ahead of
-               where it really is. */
-            int cmd_result = gf_execute_command(gf, chid, ch->dma_state.subc, ch->dma_state.mthd, word);
+            cmd_result = gf_execute_command(gf, chid, ch->dma_state.subc, ch->dma_state.mthd, word);
             if (cmd_result <= 1) {
-                gf->fifo_cache1_dma_get += 4;
+                get += 4;
                 if (!ch->dma_state.ni)
                     ch->dma_state.mthd = (ch->dma_state.mthd + 1) & 0x7ff;
                 ch->dma_state.mcnt--;
             }
-            if (cmd_result != 0)
-                break;
         } else {
-            gf->fifo_cache1_dma_get += 4;
+            get += 4;
             if ((word & 0xe0000003) == 0x20000000) {
                 /* old jump */
-                gf->fifo_cache1_dma_get = word & 0x1fffffff;
+                get = word & 0x1fffffff;
             } else if ((word & 3) == 1) {
                 /* jump */
-                gf->fifo_cache1_dma_get = word & 0xfffffffc;
+                get = word & 0xfffffffc;
             } else if ((word & 3) == 2) {
                 /* call */
                 if (ch->subr_active)
                     geforce_log("GeForce: fifo: call with subroutine active\n");
-                ch->subr_return         = gf->fifo_cache1_dma_get;
-                ch->subr_active         = 1;
-                gf->fifo_cache1_dma_get = word & 0xfffffffc;
+                ch->subr_return = get;
+                ch->subr_active = 1;
+                get             = word & 0xfffffffc;
             } else if (word == 0x00020000) {
                 /* return */
                 if (!ch->subr_active)
                     geforce_log("GeForce: fifo: return with subroutine inactive\n");
-                gf->fifo_cache1_dma_get = ch->subr_return;
-                ch->subr_active         = 0;
+                get             = ch->subr_return;
+                ch->subr_active = 0;
             } else if ((word & 0xa0030003) == 0) {
                 ch->dma_state.mthd = (word >> 2) & 0x7ff;
                 ch->dma_state.subc = (word >> 13) & 7;
@@ -6590,6 +6599,15 @@ gf_fifo_process_channel(geforce_t *gf, uint32_t chid)
                 geforce_log("GeForce: fifo: unexpected word 0x%08x\n", word);
             }
         }
+        /* DMA_GET is only published once the word has really been consumed, and
+           GET == PUT (pushbuffer drained) is only published once all queued 3D
+           work has been rasterised: drivers treat GET == PUT as "frame done" and
+           flip / lock surfaces from the CPU right after seeing it. */
+        if (get == gf->fifo_cache1_dma_put)
+            gf_render_sync(gf);
+        gf->fifo_cache1_dma_get = get;
+        if (cmd_result != 0)
+            break;
         if (!gf->fifo_thread_run)
             break;
     }
