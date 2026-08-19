@@ -144,6 +144,9 @@ typedef struct gf_texture_t {
     uint32_t level_h[16];
     uint32_t level_count;
     uint32_t max_aniso;     /* 1, 2, 4 or 8 */
+    /* cached DMA object resolution (set when the state is snapshotted) */
+    int      dma_direct;
+    uint32_t dma_base;
 } gf_texture_t;
 
 typedef struct gf_light_t {
@@ -504,12 +507,15 @@ typedef struct gf_tri_t {
     uint32_t clear_flags;
     uint32_t clear_color;
     uint32_t clear_zstencil;
+    uint32_t get_pos;      /* pushbuffer offset that produced this work item */
 } gf_tri_t;
 
 typedef struct gf_rs_slot_t {
     gf_rstate_t rs;
     int         last_tri;
     int         used;
+    uint32_t    surf_lo;   /* VRAM range touched by draws using this state (color surface) */
+    uint32_t    surf_hi;
 } gf_rs_slot_t;
 
 typedef struct gf_pio_entry_t {
@@ -571,7 +577,9 @@ typedef struct geforce_t {
     ATOMIC_UINT fifo_cache1_dma_push;
     ATOMIC_UINT fifo_cache1_dma_instance;
     ATOMIC_UINT fifo_cache1_dma_put;
-    ATOMIC_UINT fifo_cache1_dma_get;
+    ATOMIC_UINT fifo_cache1_dma_get;   /* published: never ahead of finished rendering */
+    uint32_t    fifo_dma_get_int;      /* internal pusher position */
+    ATOMIC_UINT fifo_exec_get;         /* pushbuffer offset of the word being executed */
     ATOMIC_UINT fifo_cache1_ref_cnt;
     ATOMIC_UINT fifo_cache1_pull0;
     ATOMIC_UINT fifo_cache1_semaphore;
@@ -611,6 +619,10 @@ typedef struct geforce_t {
     uint32_t crtc_intr;
     uint32_t crtc_intr_en;
     ATOMIC_UINT crtc_start;
+    uint32_t display_start;      /* start address actually programmed into the scanout */
+    uint32_t req_start;          /* start address requested by the guest */
+    ATOMIC_INT  flip_pending;
+    int         flip_wait_ticks;
     uint32_t crtc_config;
     uint32_t crtc_raster_pos;
     uint32_t crtc_cursor_offset;
@@ -956,6 +968,95 @@ gf_dma_write64(geforce_t *gf, uint32_t object, uint32_t address, uint64_t val)
         gf_physical_write64(addr_abs, val);
     else
         gf_vram_write64(gf, addr_abs, val);
+}
+
+/* Cached DMA object resolution for hot loops: linear objects in VRAM (the usual
+   case for render targets and textures) become plain array accesses. */
+typedef struct gf_surf_t {
+    int      direct;
+    uint32_t base;
+} gf_surf_t;
+
+static __inline void
+gf_surf_resolve(geforce_t *gf, uint32_t object, gf_surf_t *s)
+{
+    uint32_t flags = object ? gf_ramin_read32(gf, object) : 0;
+    if (object && (flags & 0x00002000) && !(flags & 0x00020000)) {
+        s->direct = 1;
+        s->base   = (gf_ramin_read32(gf, object + 8) & 0xFFFFF000) + (flags >> 20);
+    } else {
+        s->direct = 0;
+        s->base   = 0;
+    }
+}
+
+static __inline uint8_t
+gf_surf_read8(geforce_t *gf, const gf_surf_t *s, uint32_t object, uint32_t ofs)
+{
+    if (s->direct)
+        return gf->vram[(s->base + ofs) & gf->vram_mask];
+    return gf_dma_read8(gf, object, ofs);
+}
+
+static __inline uint16_t
+gf_surf_read16(geforce_t *gf, const gf_surf_t *s, uint32_t object, uint32_t ofs)
+{
+    if (s->direct)
+        return *(uint16_t *) &gf->vram[(s->base + ofs) & gf->vram_mask];
+    return gf_dma_read16(gf, object, ofs);
+}
+
+static __inline uint32_t
+gf_surf_read32(geforce_t *gf, const gf_surf_t *s, uint32_t object, uint32_t ofs)
+{
+    if (s->direct)
+        return *(uint32_t *) &gf->vram[(s->base + ofs) & gf->vram_mask];
+    return gf_dma_read32(gf, object, ofs);
+}
+
+static __inline uint64_t
+gf_surf_read64(geforce_t *gf, const gf_surf_t *s, uint32_t object, uint32_t ofs)
+{
+    if (s->direct)
+        return *(uint64_t *) &gf->vram[(s->base + ofs) & gf->vram_mask];
+    return gf_dma_read64(gf, object, ofs);
+}
+
+/* Direct writes do not mark changedvram; callers mark the touched row range. */
+static __inline void
+gf_surf_write8(geforce_t *gf, const gf_surf_t *s, uint32_t object, uint32_t ofs, uint8_t val)
+{
+    if (s->direct)
+        gf->vram[(s->base + ofs) & gf->vram_mask] = val;
+    else
+        gf_dma_write8(gf, object, ofs, val);
+}
+
+static __inline void
+gf_surf_write16(geforce_t *gf, const gf_surf_t *s, uint32_t object, uint32_t ofs, uint16_t val)
+{
+    if (s->direct)
+        *(uint16_t *) &gf->vram[(s->base + ofs) & gf->vram_mask] = val;
+    else
+        gf_dma_write16(gf, object, ofs, val);
+}
+
+static __inline void
+gf_surf_write32(geforce_t *gf, const gf_surf_t *s, uint32_t object, uint32_t ofs, uint32_t val)
+{
+    if (s->direct)
+        *(uint32_t *) &gf->vram[(s->base + ofs) & gf->vram_mask] = val;
+    else
+        gf_dma_write32(gf, object, ofs, val);
+}
+
+static __inline void
+gf_surf_mark_range(geforce_t *gf, const gf_surf_t *s, uint32_t ofs, uint32_t bytes)
+{
+    if (!s->direct || bytes == 0)
+        return;
+    for (uint32_t a = (s->base + ofs) & ~0xfffu; a < s->base + ofs + bytes; a += 0x1000)
+        gf_vram_changed(gf, a);
 }
 
 static void
@@ -1943,6 +2044,10 @@ gf_tex_fetch_texel(geforce_t *gf, const gf_texture_t *tex, uint32_t base_ofs, ui
     uint32_t lh      = tex->level_h[level];
     int32_t  color_int[4];
     float    color_scale[4];
+    gf_surf_t tsurf;
+
+    tsurf.direct = tex->dma_direct;
+    tsurf.base   = tex->dma_base;
 
     if (tex->compressed) {
         uint32_t bpr = MAX(lw, 4u) / 4;
@@ -1965,7 +2070,7 @@ gf_tex_fetch_texel(geforce_t *gf, const gf_texture_t *tex, uint32_t base_ofs, ui
             uint64_t color_word;
             uint32_t color_index;
             if (tex->dxt_alpha_data) {
-                uint64_t alpha_word = gf_dma_read64(gf, tex->dma_obj, tex_ofs);
+                uint64_t alpha_word = gf_surf_read64(gf, &tsurf, tex->dma_obj, tex_ofs);
                 if (tex->dxt_alpha_explicit) {
                     color_int[0]   = (alpha_word >> (oy * 16 + ox * 4)) & 0xf;
                     color_scale[0] = 1.0f / 15.0f;
@@ -1999,7 +2104,7 @@ gf_tex_fetch_texel(geforce_t *gf, const gf_texture_t *tex, uint32_t base_ofs, ui
                 color_int[0]   = 1;
                 color_scale[0] = 1.0f;
             }
-            color_word  = gf_dma_read64(gf, tex->dma_obj, tex_ofs + (tex->dxt_alpha_data ? 8 : 0));
+            color_word  = gf_surf_read64(gf, &tsurf, tex->dma_obj, tex_ofs + (tex->dxt_alpha_data ? 8 : 0));
             color_index = (color_word >> (32 + oy * 8 + ox * 2)) & 3;
             {
                 uint16_t color0 = (uint16_t) color_word;
@@ -2047,7 +2152,7 @@ gf_tex_fetch_texel(geforce_t *gf, const gf_texture_t *tex, uint32_t base_ofs, ui
         }
         case 0x04:
         case 0x83: { /* A4R4G4B4 */
-            uint16_t value = gf_dma_read16(gf, tex->dma_obj, tex_ofs);
+            uint16_t value = gf_surf_read16(gf, &tsurf, tex->dma_obj, tex_ofs);
             color_int[0] = (value >> 12) & 0xf; color_scale[0] = 1.0f / 15.0f;
             color_int[1] = (value >> 8) & 0xf;  color_scale[1] = 1.0f / 15.0f;
             color_int[2] = (value >> 4) & 0xf;  color_scale[2] = 1.0f / 15.0f;
@@ -2056,7 +2161,7 @@ gf_tex_fetch_texel(geforce_t *gf, const gf_texture_t *tex, uint32_t base_ofs, ui
         }
         case 0x05:
         case 0x84: { /* R5G6B5 */
-            uint16_t value = gf_dma_read16(gf, tex->dma_obj, tex_ofs);
+            uint16_t value = gf_surf_read16(gf, &tsurf, tex->dma_obj, tex_ofs);
             color_int[0] = 1;                    color_scale[0] = 1.0f;
             color_int[1] = (value >> 11) & 0x1f; color_scale[1] = 1.0f / 31.0f;
             color_int[2] = (value >> 5) & 0x3f;  color_scale[2] = 1.0f / 63.0f;
@@ -2065,7 +2170,7 @@ gf_tex_fetch_texel(geforce_t *gf, const gf_texture_t *tex, uint32_t base_ofs, ui
         }
         case 0x02:
         case 0x82: { /* A1R5G5B5 */
-            uint16_t value = gf_dma_read16(gf, tex->dma_obj, tex_ofs);
+            uint16_t value = gf_surf_read16(gf, &tsurf, tex->dma_obj, tex_ofs);
             if ((tex->control0 & 3) != 0 && value == tex->key_color)
                 color_int[0] = 0;
             else
@@ -2077,7 +2182,7 @@ gf_tex_fetch_texel(geforce_t *gf, const gf_texture_t *tex, uint32_t base_ofs, ui
             break;
         }
         case 0x03: { /* X1R5G5B5 */
-            uint16_t value = gf_dma_read16(gf, tex->dma_obj, tex_ofs);
+            uint16_t value = gf_surf_read16(gf, &tsurf, tex->dma_obj, tex_ofs);
             color_int[0] = 1;                    color_scale[0] = 1.0f;
             color_int[1] = (value >> 10) & 0x1f; color_scale[1] = 1.0f / 31.0f;
             color_int[2] = (value >> 5) & 0x1f;  color_scale[2] = 1.0f / 31.0f;
@@ -2086,7 +2191,7 @@ gf_tex_fetch_texel(geforce_t *gf, const gf_texture_t *tex, uint32_t base_ofs, ui
         }
         case 0x27:
         case 0x8f: { /* R6G5B5 */
-            uint16_t value = gf_dma_read16(gf, tex->dma_obj, tex_ofs);
+            uint16_t value = gf_surf_read16(gf, &tsurf, tex->dma_obj, tex_ofs);
             color_int[0] = 1;                    color_scale[0] = 1.0f;
             color_int[1] = (value >> 10) & 0x3f; color_scale[1] = 1.0f / 63.0f;
             color_int[2] = (value >> 5) & 0x1f;  color_scale[2] = 1.0f / 31.0f;
@@ -2095,7 +2200,7 @@ gf_tex_fetch_texel(geforce_t *gf, const gf_texture_t *tex, uint32_t base_ofs, ui
         }
         case 0x28:
         case 0x8b: { /* G8B8 */
-            uint16_t value = gf_dma_read16(gf, tex->dma_obj, tex_ofs);
+            uint16_t value = gf_surf_read16(gf, &tsurf, tex->dma_obj, tex_ofs);
             color_int[0] = 1;                   color_scale[0] = 1.0f;
             color_int[1] = 1;                   color_scale[1] = 1.0f;
             color_int[2] = (value >> 8) & 0xff; color_scale[2] = 1.0f / 255.0f;
@@ -2105,7 +2210,7 @@ gf_tex_fetch_texel(geforce_t *gf, const gf_texture_t *tex, uint32_t base_ofs, ui
         case 0x06:
         case 0x12:
         case 0x85: { /* A8R8G8B8 */
-            uint32_t value = gf_dma_read32(gf, tex->dma_obj, tex_ofs);
+            uint32_t value = gf_surf_read32(gf, &tsurf, tex->dma_obj, tex_ofs);
             color_int[0] = (value >> 24) & 0xff; color_scale[0] = 1.0f / 255.0f;
             color_int[1] = (value >> 16) & 0xff; color_scale[1] = 1.0f / 255.0f;
             color_int[2] = (value >> 8) & 0xff;  color_scale[2] = 1.0f / 255.0f;
@@ -2113,7 +2218,7 @@ gf_tex_fetch_texel(geforce_t *gf, const gf_texture_t *tex, uint32_t base_ofs, ui
             break;
         }
         case 0x3a: { /* A8B8G8R8 */
-            uint32_t value = gf_dma_read32(gf, tex->dma_obj, tex_ofs);
+            uint32_t value = gf_surf_read32(gf, &tsurf, tex->dma_obj, tex_ofs);
             color_int[0] = (value >> 24) & 0xff; color_scale[0] = 1.0f / 255.0f;
             color_int[1] = (value >> 0) & 0xff;  color_scale[1] = 1.0f / 255.0f;
             color_int[2] = (value >> 8) & 0xff;  color_scale[2] = 1.0f / 255.0f;
@@ -2122,7 +2227,7 @@ gf_tex_fetch_texel(geforce_t *gf, const gf_texture_t *tex, uint32_t base_ofs, ui
         }
         case 0x07:
         case 0x1e: { /* X8R8G8B8 */
-            uint32_t value = gf_dma_read32(gf, tex->dma_obj, tex_ofs);
+            uint32_t value = gf_surf_read32(gf, &tsurf, tex->dma_obj, tex_ofs);
             color_int[0] = 1;                    color_scale[0] = 1.0f;
             color_int[1] = (value >> 16) & 0xff; color_scale[1] = 1.0f / 255.0f;
             color_int[2] = (value >> 8) & 0xff;  color_scale[2] = 1.0f / 255.0f;
@@ -2130,7 +2235,7 @@ gf_tex_fetch_texel(geforce_t *gf, const gf_texture_t *tex, uint32_t base_ofs, ui
             break;
         }
         case 0x0b: { /* I8_A8R8G8B8 */
-            uint32_t pal_index = gf_dma_read8(gf, tex->dma_obj, tex_ofs);
+            uint32_t pal_index = gf_surf_read8(gf, &tsurf, tex->dma_obj, tex_ofs);
             uint32_t value     = gf_dma_read32(gf, tex->pal_dma_obj, tex->pal_ofs + pal_index * 4);
             color_int[0] = (value >> 24) & 0xff; color_scale[0] = 1.0f / 255.0f;
             color_int[1] = (value >> 16) & 0xff; color_scale[1] = 1.0f / 255.0f;
@@ -2140,7 +2245,7 @@ gf_tex_fetch_texel(geforce_t *gf, const gf_texture_t *tex, uint32_t base_ofs, ui
         }
         case 0x00: /* Y8 */
         case 0x81: { /* B8 */
-            uint8_t value = gf_dma_read8(gf, tex->dma_obj, tex_ofs);
+            uint8_t value = gf_surf_read8(gf, &tsurf, tex->dma_obj, tex_ofs);
             color_int[0] = 1;     color_scale[0] = 1.0f;
             color_int[1] = value; color_scale[1] = 1.0f / 255.0f;
             color_int[2] = value; color_scale[2] = 1.0f / 255.0f;
@@ -2149,7 +2254,7 @@ gf_tex_fetch_texel(geforce_t *gf, const gf_texture_t *tex, uint32_t base_ofs, ui
         }
         case 0x01:
         case 0x1b: { /* AY8 */
-            uint8_t value = gf_dma_read8(gf, tex->dma_obj, tex_ofs);
+            uint8_t value = gf_surf_read8(gf, &tsurf, tex->dma_obj, tex_ofs);
             color_int[0] = value; color_scale[0] = 1.0f / 255.0f;
             color_int[1] = value; color_scale[1] = 1.0f / 255.0f;
             color_int[2] = value; color_scale[2] = 1.0f / 255.0f;
@@ -3062,6 +3167,52 @@ gf_render_busy(geforce_t *gf)
     return 0;
 }
 
+/* Does any queued (not yet fully rasterised) work item render into the VRAM
+   range [lo, hi)?  Used to keep the scanout away from buffers still being drawn. */
+static int
+gf_render_pending_in_range(geforce_t *gf, uint32_t lo, uint32_t hi)
+{
+    int min_read = gf_render_min_read_idx(gf);
+    int wr       = gf->tri_write_idx;
+
+    for (int i = min_read; (wr - i) > 0; i++) {
+        const gf_tri_t     *tri  = &gf->tri_ring[i & GF_TRI_RING_MASK];
+        const gf_rs_slot_t *slot = &gf->rs_ring[tri->rs_slot & (GF_RS_SLOTS - 1)];
+        if (slot->surf_lo != 0xffffffff && slot->surf_lo < hi && slot->surf_hi > lo)
+            return 1;
+    }
+    return 0;
+}
+
+/* Pushbuffer position the guest is allowed to see: never beyond the position
+   of the oldest work item a render thread has not finished yet. */
+static uint32_t
+gf_render_visible_get(geforce_t *gf, uint32_t get)
+{
+    int min_read = gf_render_min_read_idx(gf);
+    if ((gf->tri_write_idx - min_read) > 0)
+        return gf->tri_ring[min_read & GF_TRI_RING_MASK].get_pos;
+    return get;
+}
+
+/* CPU-thread side: block (bounded) until no queued draw still targets the buffer
+   about to be scanned out. Called when the guest programs a new display start. */
+static void
+gf_wait_buffer_rendered(geforce_t *gf, uint32_t start, uint32_t bytes)
+{
+    int ticks = 0;
+
+    if (bytes == 0)
+        return;
+    while (gf_render_pending_in_range(gf, start, start + bytes) && ticks < 200) {
+        thread_reset_event(gf->render_idle_event);
+        gf_wake_render_threads(gf);
+        if (gf_render_pending_in_range(gf, start, start + bytes))
+            thread_wait_event(gf->render_idle_event, 1);
+        ticks++;
+    }
+}
+
 /* Wait until all queued 3D work has been rasterised (FIFO thread side). */
 static void
 gf_render_sync(geforce_t *gf)
@@ -3108,7 +3259,27 @@ gf_rs_prepare(geforce_t *gf, gf_channel_t *ch)
             }
             slot->used     = 1;
             slot->last_tri = gf->tri_write_idx - 1;
+            for (int t = 0; t < 4; t++) {
+                gf_surf_t ts;
+                gf_surf_resolve(gf, ch->rs.texture[t].dma_obj, &ts);
+                ch->rs.texture[t].dma_direct = ts.direct;
+                ch->rs.texture[t].dma_base   = ts.base;
+            }
             memcpy(&slot->rs, &ch->rs, sizeof(gf_rstate_t));
+            {
+                /* VRAM range this state renders into (for the display-start safety net) */
+                uint32_t base;
+                uint32_t pitch = ch->rs.surface_pitch_a & 0xffff;
+                uint32_t y0    = ch->rs.clip_vertical & 0xffff;
+                uint32_t h     = ch->rs.clip_vertical >> 16;
+                if (ch->rs.color_obj && !gf_dma_resolve(gf, ch->rs.color_obj, ch->rs.surface_color_offset, &base)) {
+                    slot->surf_lo = (base + y0 * pitch) & gf->vram_mask;
+                    slot->surf_hi = slot->surf_lo + h * pitch;
+                } else {
+                    slot->surf_lo = 0xffffffff;
+                    slot->surf_hi = 0xffffffff;
+                }
+            }
             ch->rs_slot  = found;
             ch->rs_dirty = 0;
             return;
@@ -3153,6 +3324,7 @@ gf_tri_commit(geforce_t *gf, gf_channel_t *ch, gf_tri_t *tri)
         return;
 
     tri->rs_slot                        = ch->rs_slot;
+    tri->get_pos                        = gf->fifo_exec_get;
     gf->rs_ring[ch->rs_slot].last_tri   = gf->tri_write_idx;
     GF_BARRIER(); /* release: publish the entry (and its state snapshot) before the index */
     gf->tri_write_idx++;
@@ -3177,6 +3349,11 @@ gf_d3d_raster_clear(geforce_t *gf, const gf_rstate_t *rs, const gf_tri_t *tri, i
     uint32_t height = tri->draw_height;
     uint32_t tmask  = nthreads - 1;
     uint32_t clear_surface = tri->clear_flags;
+    gf_surf_t csurf;
+    gf_surf_t zsurf;
+
+    gf_surf_resolve(gf, rs->color_obj, &csurf);
+    gf_surf_resolve(gf, rs->zeta_obj, &zsurf);
 
     if (clear_surface & 0x000000F0) {
         uint32_t pitch       = rs->surface_pitch_a & 0xFFFF;
@@ -3185,12 +3362,13 @@ gf_d3d_raster_clear(geforce_t *gf, const gf_rstate_t *rs, const gf_tri_t *tri, i
             if (((dy + y) & tmask) == (uint32_t) thread) {
                 for (uint32_t x = 0; x < width; x++) {
                     if (rs->color_bytes == 2)
-                        gf_dma_write16(gf, rs->color_obj, draw_offset + x * 2, tri->clear_color);
+                        gf_surf_write16(gf, &csurf, rs->color_obj, draw_offset + x * 2, tri->clear_color);
                     else if (rs->color_bytes == 4)
-                        gf_dma_write32(gf, rs->color_obj, draw_offset + x * 4, tri->clear_color);
+                        gf_surf_write32(gf, &csurf, rs->color_obj, draw_offset + x * 4, tri->clear_color);
                     else
-                        gf_dma_write8(gf, rs->color_obj, draw_offset + x, tri->clear_color);
+                        gf_surf_write8(gf, &csurf, rs->color_obj, draw_offset + x, tri->clear_color);
                 }
+                gf_surf_mark_range(gf, &csurf, draw_offset, width * rs->color_bytes);
             }
             draw_offset += pitch;
         }
@@ -3206,19 +3384,20 @@ gf_d3d_raster_clear(geforce_t *gf, const gf_rstate_t *rs, const gf_tri_t *tri, i
                     for (uint32_t x = 0; x < width; x++) {
                         if (rs->depth_bytes == 2) {
                             if (depth_clear)
-                                gf_dma_write16(gf, rs->zeta_obj, draw_offset + x * 2, tri->clear_zstencil);
+                                gf_surf_write16(gf, &zsurf, rs->zeta_obj, draw_offset + x * 2, tri->clear_zstencil);
                         } else {
                             if (depth_clear) {
                                 if (stencil_clear)
-                                    gf_dma_write32(gf, rs->zeta_obj, draw_offset + x * 4, tri->clear_zstencil);
+                                    gf_surf_write32(gf, &zsurf, rs->zeta_obj, draw_offset + x * 4, tri->clear_zstencil);
                                 else {
-                                    gf_dma_write8(gf, rs->zeta_obj, draw_offset + x * 4 + 1, (uint8_t) (tri->clear_zstencil >> 8));
-                                    gf_dma_write16(gf, rs->zeta_obj, draw_offset + x * 4 + 2, (uint16_t) (tri->clear_zstencil >> 16));
+                                    gf_surf_write8(gf, &zsurf, rs->zeta_obj, draw_offset + x * 4 + 1, (uint8_t) (tri->clear_zstencil >> 8));
+                                    gf_surf_write16(gf, &zsurf, rs->zeta_obj, draw_offset + x * 4 + 2, (uint16_t) (tri->clear_zstencil >> 16));
                                 }
                             } else
-                                gf_dma_write8(gf, rs->zeta_obj, draw_offset + x * 4, (uint8_t) tri->clear_zstencil);
+                                gf_surf_write8(gf, &zsurf, rs->zeta_obj, draw_offset + x * 4, (uint8_t) tri->clear_zstencil);
                         }
                     }
+                    gf_surf_mark_range(gf, &zsurf, draw_offset, width * rs->depth_bytes);
                 }
                 draw_offset += pitch;
             }
@@ -3252,6 +3431,8 @@ gf_d3d_raster_triangle(geforce_t *gf, const gf_rstate_t *rs, const gf_tri_t *tri
     int          zstencil_enable     = rs->depth_test_enable || stencil_test_enable;
     int          rc_enable           = rs->combiner_control_num_stages != 0;
     float        out_color[4];
+    gf_surf_t    csurf;
+    gf_surf_t    zsurf;
     /* texture LOD: analytic derivatives of the perspective-correct interpolation */
     double       dbdx[3], dbdy[3];
     float        lod_wx, lod_wy;
@@ -3282,6 +3463,8 @@ gf_d3d_raster_triangle(geforce_t *gf, const gf_rstate_t *rs, const gf_tri_t *tri
     dbdy[1] = ((double) sp0[0] - sp2[0]) * b012inv;
     dbdx[2] = -((double) sp1[1] - sp0[1]) * b012inv;
     dbdy[2] = ((double) sp1[0] - sp0[0]) * b012inv;
+    gf_surf_resolve(gf, rs->color_obj, &csurf);
+    gf_surf_resolve(gf, rs->zeta_obj, &zsurf);
     lod_wx  = (float) (dbdx[0] * sp0[3] + dbdx[1] * sp1[3] + dbdx[2] * sp2[3]);
     lod_wy  = (float) (dbdy[0] * sp0[3] + dbdy[1] * sp1[3] + dbdy[2] * sp2[3]);
     for (uint32_t t = 0; t < 4; t++) {
@@ -3349,9 +3532,9 @@ gf_d3d_raster_triangle(geforce_t *gf, const gf_rstate_t *rs, const gf_tri_t *tri
                 uint32_t z_prev;
                 int      depth_test_pass;
                 if (rs->depth_bytes == 2)
-                    z_prev = gf_dma_read16(gf, rs->zeta_obj, draw_offset_zeta + x * 2);
+                    z_prev = gf_surf_read16(gf, &zsurf, rs->zeta_obj, draw_offset_zeta + x * 2);
                 else {
-                    uint32_t zstencil = gf_dma_read32(gf, rs->zeta_obj, draw_offset_zeta + x * 4);
+                    uint32_t zstencil = gf_surf_read32(gf, &zsurf, rs->zeta_obj, draw_offset_zeta + x * 4);
                     z_prev            = zstencil >> 8;
                     stencil           = (uint8_t) zstencil;
                 }
@@ -3407,7 +3590,7 @@ gf_d3d_raster_triangle(geforce_t *gf, const gf_rstate_t *rs, const gf_tri_t *tri
                     }
                     if (stencil_op != 0x1e00) {
                         stencil &= rs->stencil_mask;
-                        gf_dma_write8(gf, rs->zeta_obj, draw_offset_zeta + x * 4, stencil);
+                        gf_surf_write8(gf, &zsurf, rs->zeta_obj, draw_offset_zeta + x * 4, stencil);
                     }
                     if (!stencil_test_pass)
                         continue;
@@ -3551,19 +3734,19 @@ gf_d3d_raster_triangle(geforce_t *gf, const gf_rstate_t *rs, const gf_tri_t *tri
                 float sa = a;
                 float dcr, dg, db, da;
                 if (rs->color_bytes == 2) {
-                    uint16_t color = gf_dma_read16(gf, rs->color_obj, draw_offset + x * 2);
+                    uint16_t color = gf_surf_read16(gf, &csurf, rs->color_obj, draw_offset + x * 2);
                     dcr = ((color >> 11) & 0x1f) / 31.0f;
                     dg = ((color >> 5) & 0x3f) / 63.0f;
                     db = ((color >> 0) & 0x1f) / 31.0f;
                     da = 1.0f;
                 } else if (rs->color_bytes == 4) {
-                    uint32_t color = gf_dma_read32(gf, rs->color_obj, draw_offset + x * 4);
+                    uint32_t color = gf_surf_read32(gf, &csurf, rs->color_obj, draw_offset + x * 4);
                     dcr = ((color >> 16) & 0xff) / 255.0f;
                     dg = ((color >> 8) & 0xff) / 255.0f;
                     db = ((color >> 0) & 0xff) / 255.0f;
                     da = ((color >> 24) & 0xff) / 255.0f;
                 } else {
-                    uint8_t color = gf_dma_read8(gf, rs->color_obj, draw_offset + x);
+                    uint8_t color = gf_surf_read8(gf, &csurf, rs->color_obj, draw_offset + x);
                     dcr = 0.0f;
                     dg = 0.0f;
                     db = color / 255.0f;
@@ -3593,12 +3776,12 @@ gf_d3d_raster_triangle(geforce_t *gf, const gf_rstate_t *rs, const gf_tri_t *tri
                     uint8_t  b5    = (uint8_t) (b * 31.0f + 0.5f);
                     uint16_t color = b5 << 0 | g6 << 5 | r5 << 11;
                     if (rs->color_mask == 0x01010101)
-                        gf_dma_write16(gf, rs->color_obj, draw_offset + x * 2, color);
+                        gf_surf_write16(gf, &csurf, rs->color_obj, draw_offset + x * 2, color);
                     else {
-                        uint16_t dstcolor = gf_dma_read16(gf, rs->color_obj, draw_offset + x * 2);
+                        uint16_t dstcolor = gf_surf_read16(gf, &csurf, rs->color_obj, draw_offset + x * 2);
                         dstcolor &= ~rs->color_mask_565;
                         dstcolor |= color & rs->color_mask_565;
-                        gf_dma_write16(gf, rs->color_obj, draw_offset + x * 2, dstcolor);
+                        gf_surf_write16(gf, &csurf, rs->color_obj, draw_offset + x * 2, dstcolor);
                     }
                 } else if (rs->color_bytes == 4) {
                     uint8_t  r8    = (uint8_t) (r * 255.0f + 0.5f);
@@ -3607,25 +3790,27 @@ gf_d3d_raster_triangle(geforce_t *gf, const gf_rstate_t *rs, const gf_tri_t *tri
                     uint8_t  a8    = (uint8_t) (a * 255.0f + 0.5f);
                     uint32_t color = b8 << 0 | g8 << 8 | r8 << 16 | ((uint32_t) a8 << 24);
                     if (rs->color_mask == 0x01010101)
-                        gf_dma_write32(gf, rs->color_obj, draw_offset + x * 4, color);
+                        gf_surf_write32(gf, &csurf, rs->color_obj, draw_offset + x * 4, color);
                     else {
-                        uint32_t dstcolor = gf_dma_read32(gf, rs->color_obj, draw_offset + x * 4);
+                        uint32_t dstcolor = gf_surf_read32(gf, &csurf, rs->color_obj, draw_offset + x * 4);
                         dstcolor &= ~rs->color_mask_8888;
                         dstcolor |= color & rs->color_mask_8888;
-                        gf_dma_write32(gf, rs->color_obj, draw_offset + x * 4, dstcolor);
+                        gf_surf_write32(gf, &csurf, rs->color_obj, draw_offset + x * 4, dstcolor);
                     }
                 } else {
                     uint8_t color = (uint8_t) (b * 255.0f + 0.5f);
-                    gf_dma_write8(gf, rs->color_obj, draw_offset + x, color);
+                    gf_surf_write8(gf, &csurf, rs->color_obj, draw_offset + x, color);
                 }
             }
             if (rs->depth_test_enable && rs->depth_write_enable) {
                 if (rs->depth_bytes == 2)
-                    gf_dma_write16(gf, rs->zeta_obj, draw_offset_zeta + x * 2, z_new);
+                    gf_surf_write16(gf, &zsurf, rs->zeta_obj, draw_offset_zeta + x * 2, z_new);
                 else
-                    gf_dma_write32(gf, rs->zeta_obj, draw_offset_zeta + x * 4, (z_new << 8) | stencil);
+                    gf_surf_write32(gf, &zsurf, rs->zeta_obj, draw_offset_zeta + x * 4, (z_new << 8) | stencil);
             }
         }
+        gf_surf_mark_range(gf, &csurf, draw_offset, draw_width * rs->color_bytes);
+        gf_surf_mark_range(gf, &zsurf, draw_offset_zeta, draw_width * rs->depth_bytes);
     }
 }
 
@@ -4382,6 +4567,9 @@ GF_MH(gf_d3d_mh_flip_incr)
 GF_MH(gf_d3d_mh_fifo_wait)
 {
     (void) ch; (void) cls; (void) method; (void) param;
+    /* The pusher may stall here until the vblank ISR consumes a flip; make sure
+       everything queued so far is on screen-ready before it does. */
+    gf_render_sync(gf);
     if (gf->graph_flip_read == gf->graph_flip_write) {
         gf->fifo_wait_flip = 1;
         gf->fifo_wait      = 1;
@@ -6530,20 +6718,23 @@ gf_fifo_process_channel(geforce_t *gf, uint32_t chid)
         return;
     oldchid = gf->fifo_cache1_push1 & 0x1F;
     if (oldchid == chid) {
-        if (gf->fifo_cache1_dma_put == gf->fifo_cache1_dma_get)
+        if (gf->fifo_cache1_dma_put == gf->fifo_dma_get_int)
             return;
     } else {
         if (gf_ramfc_read32(gf, chid, 0x0) == gf_ramfc_read32(gf, chid, 0x4))
             return;
     }
     if (oldchid != chid) {
+        /* Work items carry pushbuffer positions of the channel that queued them. */
+        gf_render_sync(gf);
         gf_ramfc_write32(gf, oldchid, 0x0, gf->fifo_cache1_dma_put);
-        gf_ramfc_write32(gf, oldchid, 0x4, gf->fifo_cache1_dma_get);
+        gf_ramfc_write32(gf, oldchid, 0x4, gf->fifo_dma_get_int);
         gf_ramfc_write32(gf, oldchid, 0x8, gf->fifo_cache1_ref_cnt);
         gf_ramfc_write32(gf, oldchid, 0xC, gf->fifo_cache1_dma_instance);
         gf_ramfc_write32(gf, oldchid, 0x2C, gf->fifo_cache1_semaphore);
         gf->fifo_cache1_dma_put      = gf_ramfc_read32(gf, chid, 0x0);
-        gf->fifo_cache1_dma_get      = gf_ramfc_read32(gf, chid, 0x4);
+        gf->fifo_dma_get_int         = gf_ramfc_read32(gf, chid, 0x4);
+        gf->fifo_cache1_dma_get      = gf->fifo_dma_get_int;
         gf->fifo_cache1_ref_cnt      = gf_ramfc_read32(gf, chid, 0x8);
         gf->fifo_cache1_dma_instance = gf_ramfc_read32(gf, chid, 0xC);
         gf->fifo_cache1_semaphore    = gf_ramfc_read32(gf, chid, 0x2C);
@@ -6552,14 +6743,17 @@ gf_fifo_process_channel(geforce_t *gf, uint32_t chid)
     gf->fifo_cache1_dma_push |= 0x100;
     if (gf->fifo_cache1_dma_instance == 0) {
         geforce_log("GeForce: fifo: DMA instance = 0\n");
+        gf->fifo_dma_get_int    = gf->fifo_cache1_dma_put;
         gf->fifo_cache1_dma_get = gf->fifo_cache1_dma_put;
         return;
     }
     ch = &gf->chs[chid];
-    get = gf->fifo_cache1_dma_get;
+    get = gf->fifo_dma_get_int;
     while (get != gf->fifo_cache1_dma_put) {
         uint32_t word       = gf_dma_read32(gf, gf->fifo_cache1_dma_instance << 4, get);
         int      cmd_result = 0;
+
+        gf->fifo_exec_get = get;
 
         if (ch->dma_state.mcnt) {
             cmd_result = gf_execute_command(gf, chid, ch->dma_state.subc, ch->dma_state.mthd, word);
@@ -6599,13 +6793,15 @@ gf_fifo_process_channel(geforce_t *gf, uint32_t chid)
                 geforce_log("GeForce: fifo: unexpected word 0x%08x\n", word);
             }
         }
-        /* DMA_GET is only published once the word has really been consumed, and
-           GET == PUT (pushbuffer drained) is only published once all queued 3D
-           work has been rasterised: drivers treat GET == PUT as "frame done" and
-           flip / lock surfaces from the CPU right after seeing it. */
+        /* The internal position advances as words are consumed; the GET the
+           guest sees never passes the oldest work item a render thread has not
+           finished yet, and reaches PUT (pushbuffer drained) only once all queued
+           3D work has been rasterised: drivers treat "GET passed X" / "GET == PUT"
+           as "X / the frame is done" and flip or lock surfaces from the CPU. */
+        gf->fifo_dma_get_int = get;
         if (get == gf->fifo_cache1_dma_put)
             gf_render_sync(gf);
-        gf->fifo_cache1_dma_get = get;
+        gf->fifo_cache1_dma_get = gf_render_visible_get(gf, get);
         if (cmd_result != 0)
             break;
         if (!gf->fifo_thread_run)
@@ -6759,6 +6955,23 @@ gf_service_timer(void *priv)
         gf->fifo_wait_acquire = 0;
         gf_update_fifo_wait(gf);
         gf_wake_fifo(gf);
+    }
+    if (gf->flip_pending) {
+        /* Deferred display start: apply once the target buffer has no queued draws
+           left (or after ~50 ms so a front-buffer renderer still gets updates). */
+        gf->flip_wait_ticks++;
+        if (gf->flip_wait_ticks > 500 || !gf_render_busy(gf) ||
+            !gf_render_pending_in_range(gf, gf->req_start, gf->req_start + gf->svga.rowoffset * (uint32_t) gf->svga.dispend)) {
+            gf->flip_wait_ticks = 501;
+            gf->svga.fullchange = gf->svga.monitor->mon_changeframecount;
+            svga_recalctimings(&gf->svga);
+        }
+    }
+    if (!gf->fifo_busy && !gf->fifo_work_pending) {
+        /* Keep the visible DMA_GET tracking rendering progress while the pusher is idle. */
+        uint32_t vis = gf_render_visible_get(gf, gf->fifo_dma_get_int);
+        if (vis != gf->fifo_cache1_dma_get)
+            gf->fifo_cache1_dma_get = vis;
     }
     timer_on_auto(&gf->service_timer, GF_SERVICE_TIMER_US);
 }
@@ -7038,7 +7251,25 @@ gf_recalctimings(svga_t *svga)
         svga->hdisp_time     = width;
         svga->hdisp_old      = width;
         svga->adv_flags     |= FLAG_NO_SHIFT3;
-        svga->memaddr_latch  = start;
+        /* Display-start safety net: do not scan out a buffer that queued 3D work is
+           still drawing into (drivers may flip as soon as they *believe* the frame
+           is done); keep showing the previous buffer until it is, or until the
+           deadline (see gf_service_timer) expires. */
+        gf->req_start = start;
+        if (start != gf->display_start) {
+            uint32_t pitch_bytes = (svga->crtc[0x13] | (((svga->crtc[0x19] >> 5) & 7) << 8) | (((svga->crtc[0x42] >> 6) & 1) << 11)) << 3;
+            uint32_t bytes       = pitch_bytes * (uint32_t) svga->dispend;
+            if (gf->flip_wait_ticks > 500 || !gf_render_pending_in_range(gf, start, start + bytes)) {
+                gf->display_start   = start;
+                gf->flip_pending    = 0;
+                gf->flip_wait_ticks = 0;
+            } else
+                gf->flip_pending = 1;
+        } else {
+            gf->flip_pending    = 0;
+            gf->flip_wait_ticks = 0;
+        }
+        svga->memaddr_latch  = gf->display_start;
         svga->rowoffset      = (svga->crtc[0x13] | (((svga->crtc[0x19] >> 5) & 7) << 8) | (((svga->crtc[0x42] >> 6) & 1) << 11)) << 3;
         svga->bpp            = bpp;
         svga->lowres         = 0;
@@ -7176,6 +7407,10 @@ gf_svga_out(uint16_t addr, uint8_t val, void *priv)
             if (old != val) {
                 if (svga->crtcreg < 0xe || svga->crtcreg > 0x10) {
                     if ((svga->crtcreg == 0xc) || (svga->crtcreg == 0xd)) {
+                        if (gf->nv_mode) {
+                            uint32_t start = (((svga->crtc[0x0d] | (svga->crtc[0x0c] << 8) | ((svga->crtc[0x19] & 0x1f) << 16)) << 2) + gf->crtc_start) & gf->vram_mask;
+                            gf_wait_buffer_rendered(gf, start, svga->rowoffset * (uint32_t) svga->dispend);
+                        }
                         svga->fullchange = 3;
                         svga_recalctimings(svga);
                     } else {
@@ -7739,6 +7974,7 @@ gf_reg_write32(geforce_t *gf, uint32_t address, uint32_t value)
         gf_wake_fifo(gf);
     } else if (address == 0x3244) {
         gf_wait_fifo_idle(gf);
+        gf->fifo_dma_get_int    = value;
         gf->fifo_cache1_dma_get = value;
     } else if (address == 0x3248) {
         gf->fifo_cache1_ref_cnt = value;
@@ -7843,6 +8079,10 @@ gf_reg_write32(geforce_t *gf, uint32_t address, uint32_t value)
         gf_update_irq(gf);
     } else if (address == 0x600800) {
         gf->crtc_start   = value;
+        if (gf->nv_mode) {
+            uint32_t start = (((svga->crtc[0x0d] | (svga->crtc[0x0c] << 8) | ((svga->crtc[0x19] & 0x1f) << 16)) << 2) + value) & gf->vram_mask;
+            gf_wait_buffer_rendered(gf, start, svga->rowoffset * (uint32_t) svga->dispend);
+        }
         svga->fullchange = svga->monitor->mon_changeframecount;
         svga_recalctimings(svga);
     } else if (address == 0x600804) {
@@ -8528,6 +8768,12 @@ gf_reset_state(geforce_t *gf)
     gf->crtc_intr         = 0;
     gf->crtc_intr_en      = 0;
     gf->crtc_start        = 0;
+    gf->display_start     = 0;
+    gf->req_start         = 0;
+    gf->flip_pending      = 0;
+    gf->flip_wait_ticks   = 0;
+    gf->fifo_dma_get_int  = 0;
+    gf->fifo_exec_get     = 0;
     gf->crtc_config       = 0;
     gf->crtc_raster_pos   = 0;
     gf->crtc_cursor_offset = 0;
