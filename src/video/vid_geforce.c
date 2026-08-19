@@ -132,6 +132,18 @@ typedef struct gf_texture_t {
     uint32_t control3;
     uint32_t key_color;
     float    offset_matrix[4];
+    /* filtering */
+    uint32_t filter;
+    int      mag_linear;
+    int      min_linear;
+    int      mip_mode;      /* 0 = none, 1 = nearest level, 2 = linear between levels */
+    float    lod_bias;
+    /* per-level layout (relative to offset / cubemap face base) */
+    uint32_t level_offset[16];
+    uint32_t level_w[16];
+    uint32_t level_h[16];
+    uint32_t level_count;
+    uint32_t max_aniso;     /* 1, 2, 4 or 8 */
 } gf_texture_t;
 
 typedef struct gf_light_t {
@@ -1849,6 +1861,7 @@ gf_texture_update_size(gf_texture_t *tex)
 {
     uint32_t lw;
     uint32_t lh;
+    uint32_t ofs = 0;
 
     if (tex->linear) {
         tex->size[0] = tex->image_rect >> 16;
@@ -1857,14 +1870,30 @@ gf_texture_update_size(gf_texture_t *tex)
         tex->size[0] = 1 << tex->base_size[0];
         tex->size[1] = 1 << tex->base_size[1];
     }
-    lw              = tex->size[0];
-    lh              = tex->size[1];
-    tex->face_bytes = 0;
-    for (uint32_t i = 0; i < tex->levels; i++) {
-        uint32_t level_bytes = lw * lh * tex->color_bytes;
+    if (tex->size[0] == 0)
+        tex->size[0] = 1;
+    if (tex->size[1] == 0)
+        tex->size[1] = 1;
+
+    lw = tex->size[0];
+    lh = tex->size[1];
+    tex->level_count = tex->levels;
+    if (tex->level_count == 0)
+        tex->level_count = 1;
+    if (tex->level_count > 16)
+        tex->level_count = 16;
+    if (tex->linear) /* pitch-linear textures have a single level */
+        tex->level_count = 1;
+    for (uint32_t i = 0; i < 16; i++) {
+        uint32_t level_bytes;
+        tex->level_offset[i] = ofs;
+        tex->level_w[i]      = lw;
+        tex->level_h[i]      = lh;
         if (tex->compressed)
-            level_bytes /= 16;
-        tex->face_bytes += level_bytes;
+            level_bytes = (MAX(lw, 4u) / 4) * (MAX(lh, 4u) / 4) * tex->color_bytes;
+        else
+            level_bytes = lw * lh * tex->color_bytes;
+        ofs += level_bytes;
         lw /= 2;
         lh /= 2;
         if (lw == 0)
@@ -1872,18 +1901,400 @@ gf_texture_update_size(gf_texture_t *tex)
         if (lh == 0)
             lh = 1;
     }
+    tex->face_bytes = tex->level_offset[tex->level_count - 1];
+    if (tex->compressed)
+        tex->face_bytes += (MAX(tex->level_w[tex->level_count - 1], 4u) / 4) * (MAX(tex->level_h[tex->level_count - 1], 4u) / 4) * tex->color_bytes;
+    else
+        tex->face_bytes += tex->level_w[tex->level_count - 1] * tex->level_h[tex->level_count - 1] * tex->color_bytes;
     tex->face_bytes = (tex->face_bytes + 127) & ~127;
 }
 
+/* Wrap an integer texel coordinate according to the NV wrap mode. */
+static __inline int32_t
+gf_tex_wrap(int32_t c, int32_t size, uint32_t mode)
+{
+    if (c >= 0 && c < size)
+        return c;
+    switch (mode) {
+        case 1: /* WRAP */
+            c %= size;
+            if (c < 0)
+                c += size;
+            return c;
+        case 2: /* MIRROR */
+            c %= size * 2;
+            if (c < 0)
+                c += size * 2;
+            if (c >= size)
+                c = size * 2 - c - 1;
+            return c;
+        default: /* CLAMP_TO_EDGE / BORDER / CLAMP */
+            return c < 0 ? 0 : size - 1;
+    }
+}
+
+/* Fetch one texel (integer coordinates inside the given level) as float RGBA. */
 static void
-gf_d3d_sample_texture(geforce_t *gf, const gf_texture_t *tex, float coords_in[3], float color[4])
+gf_tex_fetch_texel(geforce_t *gf, const gf_texture_t *tex, uint32_t base_ofs, uint32_t level,
+                   uint32_t x, uint32_t y, float color[4])
+{
+    uint32_t tex_ofs = base_ofs + tex->level_offset[level];
+    uint32_t lw      = tex->level_w[level];
+    uint32_t lh      = tex->level_h[level];
+    int32_t  color_int[4];
+    float    color_scale[4];
+
+    if (tex->compressed) {
+        uint32_t bpr = MAX(lw, 4u) / 4;
+        tex_ofs += (y >> 2) * bpr * tex->color_bytes + (x >> 2) * tex->color_bytes;
+    } else if (tex->linear) {
+        uint32_t pitch = tex->control1 >> 16;
+        tex_ofs += y * pitch + x * tex->color_bytes;
+    } else
+        tex_ofs += gf_swizzle(x, y, lw, lh) * tex->color_bytes;
+
+    switch (tex->format) {
+        case 0x0c: /* DXT1 */
+        case 0x0e: /* DXT23 */
+        case 0x0f: /* DXT45 */
+        case 0x86: /* DXT1 */
+        case 0x87: /* DXT23 */
+        case 0x88: { /* DXT45 */
+            uint32_t ox = x & 3;
+            uint32_t oy = y & 3;
+            uint64_t color_word;
+            uint32_t color_index;
+            if (tex->dxt_alpha_data) {
+                uint64_t alpha_word = gf_dma_read64(gf, tex->dma_obj, tex_ofs);
+                if (tex->dxt_alpha_explicit) {
+                    color_int[0]   = (alpha_word >> (oy * 16 + ox * 4)) & 0xf;
+                    color_scale[0] = 1.0f / 15.0f;
+                } else {
+                    uint32_t alpha_index = (alpha_word >> (16 + oy * 12 + ox * 3)) & 7;
+                    uint8_t  alpha0      = (uint8_t) alpha_word;
+                    uint8_t  alpha1      = (uint8_t) (alpha_word >> 8);
+                    static const int w0_gt[8] = { 7, 0, 6, 5, 4, 3, 2, 1 };
+                    static const int w0_le[8] = { 5, 0, 4, 3, 2, 1, 0, 0 };
+                    if (alpha_index == 0) {
+                        color_int[0]   = alpha0;
+                        color_scale[0] = 1.0f / 255.0f;
+                    } else if (alpha_index == 1) {
+                        color_int[0]   = alpha1;
+                        color_scale[0] = 1.0f / 255.0f;
+                    } else if (alpha0 > alpha1) {
+                        color_int[0]   = w0_gt[alpha_index] * alpha0 + (7 - w0_gt[alpha_index]) * alpha1;
+                        color_scale[0] = 1.0f / 1785.0f;
+                    } else if (alpha_index == 6) {
+                        color_int[0]   = 0;
+                        color_scale[0] = 1.0f;
+                    } else if (alpha_index == 7) {
+                        color_int[0]   = 1;
+                        color_scale[0] = 1.0f;
+                    } else {
+                        color_int[0]   = w0_le[alpha_index] * alpha0 + (5 - w0_le[alpha_index]) * alpha1;
+                        color_scale[0] = 1.0f / 1275.0f;
+                    }
+                }
+            } else {
+                color_int[0]   = 1;
+                color_scale[0] = 1.0f;
+            }
+            color_word  = gf_dma_read64(gf, tex->dma_obj, tex_ofs + (tex->dxt_alpha_data ? 8 : 0));
+            color_index = (color_word >> (32 + oy * 8 + ox * 2)) & 3;
+            {
+                uint16_t color0 = (uint16_t) color_word;
+                uint16_t color1 = (uint16_t) (color_word >> 16);
+                int      r0 = (color0 >> 11) & 0x1f, g0 = (color0 >> 5) & 0x3f, b0 = color0 & 0x1f;
+                int      r1 = (color1 >> 11) & 0x1f, g1 = (color1 >> 5) & 0x3f, b1 = color1 & 0x1f;
+                switch (color_index) {
+                    case 0:
+                        color_int[1] = r0; color_scale[1] = 1.0f / 31.0f;
+                        color_int[2] = g0; color_scale[2] = 1.0f / 63.0f;
+                        color_int[3] = b0; color_scale[3] = 1.0f / 31.0f;
+                        break;
+                    case 1:
+                        color_int[1] = r1; color_scale[1] = 1.0f / 31.0f;
+                        color_int[2] = g1; color_scale[2] = 1.0f / 63.0f;
+                        color_int[3] = b1; color_scale[3] = 1.0f / 31.0f;
+                        break;
+                    case 2:
+                        if (color0 > color1) {
+                            color_int[1] = 2 * r0 + r1; color_scale[1] = 1.0f / 93.0f;
+                            color_int[2] = 2 * g0 + g1; color_scale[2] = 1.0f / 189.0f;
+                            color_int[3] = 2 * b0 + b1; color_scale[3] = 1.0f / 93.0f;
+                        } else {
+                            color_int[1] = r0 + r1; color_scale[1] = 1.0f / 62.0f;
+                            color_int[2] = g0 + g1; color_scale[2] = 1.0f / 126.0f;
+                            color_int[3] = b0 + b1; color_scale[3] = 1.0f / 62.0f;
+                        }
+                        break;
+                    default:
+                        if (color0 > color1) {
+                            color_int[1] = 2 * r1 + r0; color_scale[1] = 1.0f / 93.0f;
+                            color_int[2] = 2 * g1 + g0; color_scale[2] = 1.0f / 189.0f;
+                            color_int[3] = 2 * b1 + b0; color_scale[3] = 1.0f / 93.0f;
+                        } else {
+                            /* transparent black */
+                            color_int[0] = 0; color_scale[0] = 1.0f;
+                            color_int[1] = 0; color_scale[1] = 1.0f;
+                            color_int[2] = 0; color_scale[2] = 1.0f;
+                            color_int[3] = 0; color_scale[3] = 1.0f;
+                        }
+                        break;
+                }
+            }
+            break;
+        }
+        case 0x04:
+        case 0x83: { /* A4R4G4B4 */
+            uint16_t value = gf_dma_read16(gf, tex->dma_obj, tex_ofs);
+            color_int[0] = (value >> 12) & 0xf; color_scale[0] = 1.0f / 15.0f;
+            color_int[1] = (value >> 8) & 0xf;  color_scale[1] = 1.0f / 15.0f;
+            color_int[2] = (value >> 4) & 0xf;  color_scale[2] = 1.0f / 15.0f;
+            color_int[3] = (value >> 0) & 0xf;  color_scale[3] = 1.0f / 15.0f;
+            break;
+        }
+        case 0x05:
+        case 0x84: { /* R5G6B5 */
+            uint16_t value = gf_dma_read16(gf, tex->dma_obj, tex_ofs);
+            color_int[0] = 1;                    color_scale[0] = 1.0f;
+            color_int[1] = (value >> 11) & 0x1f; color_scale[1] = 1.0f / 31.0f;
+            color_int[2] = (value >> 5) & 0x3f;  color_scale[2] = 1.0f / 63.0f;
+            color_int[3] = (value >> 0) & 0x1f;  color_scale[3] = 1.0f / 31.0f;
+            break;
+        }
+        case 0x02:
+        case 0x82: { /* A1R5G5B5 */
+            uint16_t value = gf_dma_read16(gf, tex->dma_obj, tex_ofs);
+            if ((tex->control0 & 3) != 0 && value == tex->key_color)
+                color_int[0] = 0;
+            else
+                color_int[0] = (value >> 15) & 1;
+            color_scale[0] = 1.0f;
+            color_int[1] = (value >> 10) & 0x1f; color_scale[1] = 1.0f / 31.0f;
+            color_int[2] = (value >> 5) & 0x1f;  color_scale[2] = 1.0f / 31.0f;
+            color_int[3] = (value >> 0) & 0x1f;  color_scale[3] = 1.0f / 31.0f;
+            break;
+        }
+        case 0x03: { /* X1R5G5B5 */
+            uint16_t value = gf_dma_read16(gf, tex->dma_obj, tex_ofs);
+            color_int[0] = 1;                    color_scale[0] = 1.0f;
+            color_int[1] = (value >> 10) & 0x1f; color_scale[1] = 1.0f / 31.0f;
+            color_int[2] = (value >> 5) & 0x1f;  color_scale[2] = 1.0f / 31.0f;
+            color_int[3] = (value >> 0) & 0x1f;  color_scale[3] = 1.0f / 31.0f;
+            break;
+        }
+        case 0x27:
+        case 0x8f: { /* R6G5B5 */
+            uint16_t value = gf_dma_read16(gf, tex->dma_obj, tex_ofs);
+            color_int[0] = 1;                    color_scale[0] = 1.0f;
+            color_int[1] = (value >> 10) & 0x3f; color_scale[1] = 1.0f / 63.0f;
+            color_int[2] = (value >> 5) & 0x1f;  color_scale[2] = 1.0f / 31.0f;
+            color_int[3] = (value >> 0) & 0x1f;  color_scale[3] = 1.0f / 31.0f;
+            break;
+        }
+        case 0x28:
+        case 0x8b: { /* G8B8 */
+            uint16_t value = gf_dma_read16(gf, tex->dma_obj, tex_ofs);
+            color_int[0] = 1;                   color_scale[0] = 1.0f;
+            color_int[1] = 1;                   color_scale[1] = 1.0f;
+            color_int[2] = (value >> 8) & 0xff; color_scale[2] = 1.0f / 255.0f;
+            color_int[3] = (value >> 0) & 0xff; color_scale[3] = 1.0f / 255.0f;
+            break;
+        }
+        case 0x06:
+        case 0x12:
+        case 0x85: { /* A8R8G8B8 */
+            uint32_t value = gf_dma_read32(gf, tex->dma_obj, tex_ofs);
+            color_int[0] = (value >> 24) & 0xff; color_scale[0] = 1.0f / 255.0f;
+            color_int[1] = (value >> 16) & 0xff; color_scale[1] = 1.0f / 255.0f;
+            color_int[2] = (value >> 8) & 0xff;  color_scale[2] = 1.0f / 255.0f;
+            color_int[3] = (value >> 0) & 0xff;  color_scale[3] = 1.0f / 255.0f;
+            break;
+        }
+        case 0x3a: { /* A8B8G8R8 */
+            uint32_t value = gf_dma_read32(gf, tex->dma_obj, tex_ofs);
+            color_int[0] = (value >> 24) & 0xff; color_scale[0] = 1.0f / 255.0f;
+            color_int[1] = (value >> 0) & 0xff;  color_scale[1] = 1.0f / 255.0f;
+            color_int[2] = (value >> 8) & 0xff;  color_scale[2] = 1.0f / 255.0f;
+            color_int[3] = (value >> 16) & 0xff; color_scale[3] = 1.0f / 255.0f;
+            break;
+        }
+        case 0x07:
+        case 0x1e: { /* X8R8G8B8 */
+            uint32_t value = gf_dma_read32(gf, tex->dma_obj, tex_ofs);
+            color_int[0] = 1;                    color_scale[0] = 1.0f;
+            color_int[1] = (value >> 16) & 0xff; color_scale[1] = 1.0f / 255.0f;
+            color_int[2] = (value >> 8) & 0xff;  color_scale[2] = 1.0f / 255.0f;
+            color_int[3] = (value >> 0) & 0xff;  color_scale[3] = 1.0f / 255.0f;
+            break;
+        }
+        case 0x0b: { /* I8_A8R8G8B8 */
+            uint32_t pal_index = gf_dma_read8(gf, tex->dma_obj, tex_ofs);
+            uint32_t value     = gf_dma_read32(gf, tex->pal_dma_obj, tex->pal_ofs + pal_index * 4);
+            color_int[0] = (value >> 24) & 0xff; color_scale[0] = 1.0f / 255.0f;
+            color_int[1] = (value >> 16) & 0xff; color_scale[1] = 1.0f / 255.0f;
+            color_int[2] = (value >> 8) & 0xff;  color_scale[2] = 1.0f / 255.0f;
+            color_int[3] = (value >> 0) & 0xff;  color_scale[3] = 1.0f / 255.0f;
+            break;
+        }
+        case 0x00: /* Y8 */
+        case 0x81: { /* B8 */
+            uint8_t value = gf_dma_read8(gf, tex->dma_obj, tex_ofs);
+            color_int[0] = 1;     color_scale[0] = 1.0f;
+            color_int[1] = value; color_scale[1] = 1.0f / 255.0f;
+            color_int[2] = value; color_scale[2] = 1.0f / 255.0f;
+            color_int[3] = value; color_scale[3] = 1.0f / 255.0f;
+            break;
+        }
+        case 0x01:
+        case 0x1b: { /* AY8 */
+            uint8_t value = gf_dma_read8(gf, tex->dma_obj, tex_ofs);
+            color_int[0] = value; color_scale[0] = 1.0f / 255.0f;
+            color_int[1] = value; color_scale[1] = 1.0f / 255.0f;
+            color_int[2] = value; color_scale[2] = 1.0f / 255.0f;
+            color_int[3] = value; color_scale[3] = 1.0f / 255.0f;
+            break;
+        }
+        default:
+            color_int[0] = 1; color_scale[0] = 0.8f;
+            color_int[1] = 1; color_scale[1] = 0.8f + (float) x / (float) lw * 0.2f;
+            color_int[2] = 1; color_scale[2] = 0.6f + (float) y / (float) lh * 0.2f;
+            color_int[3] = 1; color_scale[3] = 0.6f;
+            break;
+    }
+    if (tex->signed_any) {
+        for (uint32_t i = 0; i < 4; i++) {
+            if (tex->signed_comp[i]) {
+                color_int[i]   = (int8_t) color_int[i];
+                color_scale[i] = 1.0f / 128.0f;
+            }
+        }
+    }
+    /* A R G B -> color[3] color[0] color[1] color[2] */
+    for (uint32_t i = 0; i < 4; i++) {
+        uint32_t j = (i + 3) & 3;
+        color[j]   = color_int[i] * color_scale[i];
+    }
+}
+
+/* Sample one texture level at continuous coordinates u,v (already in texel units,
+   0.5 = first texel centre) with nearest or bilinear filtering. */
+static void
+gf_tex_sample_level(geforce_t *gf, const gf_texture_t *tex, uint32_t base_ofs, uint32_t level,
+                    float u, float v, int bilinear, float color[4])
+{
+    int32_t lw = (int32_t) tex->level_w[level];
+    int32_t lh = (int32_t) tex->level_h[level];
+
+    if (!bilinear) {
+        int32_t x = gf_tex_wrap((int32_t) floorf(u), lw, tex->wrap[0]);
+        int32_t y = gf_tex_wrap((int32_t) floorf(v), lh, tex->wrap[1]);
+        gf_tex_fetch_texel(gf, tex, base_ofs, level, x, y, color);
+    } else {
+        float   fu = u - 0.5f;
+        float   fv = v - 0.5f;
+        float   fx0 = floorf(fu);
+        float   fy0 = floorf(fv);
+        float   wx  = fu - fx0;
+        float   wy  = fv - fy0;
+        int32_t x0  = gf_tex_wrap((int32_t) fx0, lw, tex->wrap[0]);
+        int32_t x1  = gf_tex_wrap((int32_t) fx0 + 1, lw, tex->wrap[0]);
+        int32_t y0  = gf_tex_wrap((int32_t) fy0, lh, tex->wrap[1]);
+        int32_t y1  = gf_tex_wrap((int32_t) fy0 + 1, lh, tex->wrap[1]);
+        float   c00[4], c10[4], c01[4], c11[4];
+        gf_tex_fetch_texel(gf, tex, base_ofs, level, x0, y0, c00);
+        gf_tex_fetch_texel(gf, tex, base_ofs, level, x1, y0, c10);
+        gf_tex_fetch_texel(gf, tex, base_ofs, level, x0, y1, c01);
+        gf_tex_fetch_texel(gf, tex, base_ofs, level, x1, y1, c11);
+        for (int i = 0; i < 4; i++) {
+            float top    = c00[i] + (c10[i] - c00[i]) * wx;
+            float bottom = c01[i] + (c11[i] - c01[i]) * wx;
+            color[i]     = top + (bottom - top) * wy;
+        }
+    }
+}
+
+/* Sample at normalised coordinates (cu, cv) with the given level of detail:
+   mip level selection (nearest or trilinear) plus nearest/bilinear inside a level. */
+static void
+gf_tex_sample_lod(geforce_t *gf, const gf_texture_t *tex, uint32_t base_ofs, float cu, float cv, float lod, float color[4])
+{
+    uint32_t level    = 0;
+    int      bilinear = (lod > 0.0f) ? tex->min_linear : tex->mag_linear;
+    float    u, v;
+
+    if (tex->mip_mode != 0 && tex->level_count > 1 && lod > 0.0f) {
+        float l = lod + tex->lod_bias;
+        if (l < 0.0f)
+            l = 0.0f;
+        if (tex->mip_mode == 2) {
+            /* LINEAR_MIPMAP_LINEAR: blend the two nearest levels (trilinear) */
+            uint32_t level0 = (uint32_t) l;
+            uint32_t level1;
+            float    frac;
+            if (level0 >= tex->level_count - 1) {
+                level0 = tex->level_count - 1;
+                frac   = 0.0f;
+            } else
+                frac = l - (float) level0;
+            level1 = level0 + 1;
+            if (frac <= 0.001f || level1 >= tex->level_count)
+                level = level0;
+            else {
+                float c0[4], c1[4];
+                float u0, v0, u1, v1;
+                if (tex->unnormalized) {
+                    u0 = u1 = cu;
+                    v0 = v1 = cv;
+                } else {
+                    u0 = cu * (float) tex->level_w[level0];
+                    v0 = cv * (float) tex->level_h[level0];
+                    u1 = cu * (float) tex->level_w[level1];
+                    v1 = cv * (float) tex->level_h[level1];
+                }
+                if (fabsf(u0) > 1.0e7f || fabsf(v0) > 1.0e7f) {
+                    u0 = v0 = 0.0f;
+                    u1 = v1 = 0.0f;
+                }
+                gf_tex_sample_level(gf, tex, base_ofs, level0, u0, v0, bilinear, c0);
+                gf_tex_sample_level(gf, tex, base_ofs, level1, u1, v1, bilinear, c1);
+                for (int i = 0; i < 4; i++)
+                    color[i] = c0[i] + (c1[i] - c0[i]) * frac;
+                return;
+            }
+        } else {
+            level = (uint32_t) (l + 0.5f);
+            if (level >= tex->level_count)
+                level = tex->level_count - 1;
+        }
+    }
+
+    if (tex->unnormalized) {
+        u = cu;
+        v = cv;
+    } else {
+        u = cu * (float) tex->level_w[level];
+        v = cv * (float) tex->level_h[level];
+    }
+    if (fabsf(u) > 1.0e7f || fabsf(v) > 1.0e7f) {
+        u = 0.0f;
+        v = 0.0f;
+    }
+    gf_tex_sample_level(gf, tex, base_ofs, level, u, v, bilinear, color);
+}
+
+/* grad: screen-space derivatives of the (normalised) texture coordinates,
+   { ds/dx, dt/dx, ds/dy, dt/dy }, or NULL when unknown (treated as magnified). */
+static void
+gf_d3d_sample_texture(geforce_t *gf, const gf_texture_t *tex, float coords_in[3], float color[4], const float *grad)
 {
     float   *coords;
     float    coords_cubemap[3];
-    uint32_t tex_ofs = tex->offset;
-    uint32_t xy[2];
-    int32_t  color_int[4];
-    float    color_scale[4];
+    uint32_t base_ofs = tex->offset;
+    float    lod      = 0.0f;
+    float    px2      = 0.0f;
+    float    py2      = 0.0f;
 
     if (tex->cubemap) {
         uint32_t face;
@@ -1928,407 +2339,71 @@ gf_d3d_sample_texture(geforce_t *gf, const gf_texture_t *tex, float coords_in[3]
         coords_cubemap[1] = (coords_cubemap[1] + 1.0f) * 0.5f;
         coords_cubemap[2] = 0.0f;
         coords            = coords_cubemap;
-        tex_ofs += face * tex->face_bytes;
+        base_ofs += face * tex->face_bytes;
     } else
         coords = coords_in;
 
-    for (int i = 0; i < 2; i++) {
-        uint32_t size = tex->size[i];
-        if (size == 0)
-            size = 1;
-        if (tex->unnormalized) {
-            int32_t c = (int32_t) coords[i];
-            if (c < 0 || (uint32_t) c >= size) {
-                switch (tex->wrap[i]) {
-                    case 1: /* WRAP */
-                        c %= (int32_t) size;
-                        if (c < 0)
-                            c += size;
-                        break;
-                    case 2: /* MIRROR */
-                        c %= (int32_t) (size * 2);
-                        if (c < 0)
-                            c += size * 2;
-                        if ((uint32_t) c >= size)
-                            c = size * 2 - c - 1;
-                        break;
-                    default: /* CLAMP_TO_EDGE */
-                        c = c < 0 ? 0 : size - 1;
-                        break;
-                }
-            }
-            xy[i] = c;
-        } else {
-            float c = coords[i];
-            if (!(c >= 0.0f && c <= 1.0f)) {
-                switch (tex->wrap[i]) {
-                    case 1: /* WRAP */
-                        c = c - floorf(c);
-                        break;
-                    case 2: /* MIRROR */
-                        c = fmodf(c, 2.0f);
-                        if (c < 0.0f)
-                            c += 2.0f;
-                        if (c > 1.0f)
-                            c = 2.0f - c;
-                        break;
-                    default: /* CLAMP_TO_EDGE */
-                        c = c < 0.0f ? 0.0f : 1.0f;
-                        break;
-                }
-                if (!(c >= 0.0f && c <= 1.0f)) /* NaN */
-                    c = 0.0f;
-            }
-            xy[i] = c == 1.0f ? size - 1 : (uint32_t) (c * size);
-            if (xy[i] >= size)
-                xy[i] = size - 1;
-        }
-    }
-    if (tex->compressed) {
-        uint32_t pitch = tex->size[0] * (tex->dxt_alpha_data ? 4 : 2);
-        uint32_t bx    = xy[0] >> 2;
-        uint32_t by    = xy[1] >> 2;
-        tex_ofs += by * pitch + bx * tex->color_bytes;
-    } else if (tex->linear) {
-        uint32_t pitch = tex->control1 >> 16;
-        tex_ofs += xy[1] * pitch + xy[0] * tex->color_bytes;
-    } else
-        tex_ofs += gf_swizzle(xy[0], xy[1], tex->size[0], tex->size[1]) * tex->color_bytes;
+    /* NaN protection */
+    if (!(coords[0] == coords[0]))
+        coords[0] = 0.0f;
+    if (!(coords[1] == coords[1]))
+        coords[1] = 0.0f;
 
-    switch (tex->format) {
-        case 0x0c: /* DXT1 */
-        case 0x0e: /* DXT23 */
-        case 0x0f: /* DXT45 */
-        case 0x86: /* DXT1 */
-        case 0x87: /* DXT23 */
-        case 0x88: { /* DXT45 */
-            uint32_t ox = xy[0] & 3;
-            uint32_t oy = xy[1] & 3;
-            uint64_t color_word;
-            uint32_t color_index;
-            if (tex->dxt_alpha_data) {
-                uint64_t alpha_word = gf_dma_read64(gf, tex->dma_obj, tex_ofs);
-                if (tex->dxt_alpha_explicit) {
-                    color_int[0]   = (alpha_word >> (oy * 16 + ox * 4)) & 0xf;
-                    color_scale[0] = 1.0f / 15.0f;
-                } else {
-                    uint32_t alpha_index = (alpha_word >> (16 + oy * 12 + ox * 3)) & 7;
-                    uint8_t  alpha0      = (uint8_t) alpha_word;
-                    uint8_t  alpha1      = (uint8_t) (alpha_word >> 8);
-                    switch (alpha_index) {
-                        case 0:
-                            color_int[0]   = alpha0;
-                            color_scale[0] = 1.0f / 255.0f;
-                            break;
-                        case 1:
-                            color_int[0]   = alpha1;
-                            color_scale[0] = 1.0f / 255.0f;
-                            break;
-                        case 2:
-                            if (alpha0 > alpha1) {
-                                color_int[0]   = 6 * alpha0 + alpha1;
-                                color_scale[0] = 1.0f / 1785.0f;
-                            } else {
-                                color_int[0]   = 4 * alpha0 + alpha1;
-                                color_scale[0] = 1.0f / 1275.0f;
-                            }
-                            break;
-                        case 3:
-                            if (alpha0 > alpha1) {
-                                color_int[0]   = 5 * alpha0 + 2 * alpha1;
-                                color_scale[0] = 1.0f / 1785.0f;
-                            } else {
-                                color_int[0]   = 3 * alpha0 + 2 * alpha1;
-                                color_scale[0] = 1.0f / 1275.0f;
-                            }
-                            break;
-                        case 4:
-                            if (alpha0 > alpha1) {
-                                color_int[0]   = 4 * alpha0 + 3 * alpha1;
-                                color_scale[0] = 1.0f / 1785.0f;
-                            } else {
-                                color_int[0]   = 2 * alpha0 + 3 * alpha1;
-                                color_scale[0] = 1.0f / 1275.0f;
-                            }
-                            break;
-                        case 5:
-                            if (alpha0 > alpha1) {
-                                color_int[0]   = 3 * alpha0 + 4 * alpha1;
-                                color_scale[0] = 1.0f / 1785.0f;
-                            } else {
-                                color_int[0]   = alpha0 + 4 * alpha1;
-                                color_scale[0] = 1.0f / 1275.0f;
-                            }
-                            break;
-                        case 6:
-                            if (alpha0 > alpha1) {
-                                color_int[0]   = 2 * alpha0 + 5 * alpha1;
-                                color_scale[0] = 1.0f / 1785.0f;
-                            } else {
-                                color_int[0]   = 0;
-                                color_scale[0] = 1.0f;
-                            }
-                            break;
-                        default:
-                            if (alpha0 > alpha1) {
-                                color_int[0]   = alpha0 + 6 * alpha1;
-                                color_scale[0] = 1.0f / 1785.0f;
-                            } else {
-                                color_int[0]   = 1;
-                                color_scale[0] = 1.0f;
-                            }
-                            break;
-                    }
-                }
-            } else {
-                color_int[0]   = 1;
-                color_scale[0] = 1.0f;
-            }
-            color_word  = gf_dma_read64(gf, tex->dma_obj, tex_ofs + (tex->dxt_alpha_data ? 8 : 0));
-            color_index = (color_word >> (32 + oy * 8 + ox * 2)) & 3;
-            {
-                uint16_t color0 = (uint16_t) color_word;
-                uint16_t color1 = (uint16_t) (color_word >> 16);
-                switch (color_index) {
-                    case 0:
-                        color_int[1]   = (color0 >> 11) & 0x1f;
-                        color_scale[1] = 1.0f / 31.0f;
-                        color_int[2]   = (color0 >> 5) & 0x3f;
-                        color_scale[2] = 1.0f / 63.0f;
-                        color_int[3]   = (color0 >> 0) & 0x1f;
-                        color_scale[3] = 1.0f / 31.0f;
-                        break;
-                    case 1:
-                        color_int[1]   = (color1 >> 11) & 0x1f;
-                        color_scale[1] = 1.0f / 31.0f;
-                        color_int[2]   = (color1 >> 5) & 0x3f;
-                        color_scale[2] = 1.0f / 63.0f;
-                        color_int[3]   = (color1 >> 0) & 0x1f;
-                        color_scale[3] = 1.0f / 31.0f;
-                        break;
-                    case 2:
-                        if (color0 > color1) {
-                            color_int[1]   = 2 * ((color0 >> 11) & 0x1f) + ((color1 >> 11) & 0x1f);
-                            color_scale[1] = 1.0f / 93.0f;
-                            color_int[2]   = 2 * ((color0 >> 5) & 0x3f) + ((color1 >> 5) & 0x3f);
-                            color_scale[2] = 1.0f / 189.0f;
-                            color_int[3]   = 2 * ((color0 >> 0) & 0x1f) + ((color1 >> 0) & 0x1f);
-                            color_scale[3] = 1.0f / 93.0f;
-                        } else {
-                            color_int[1]   = ((color0 >> 11) & 0x1f) + ((color1 >> 11) & 0x1f);
-                            color_scale[1] = 1.0f / 62.0f;
-                            color_int[2]   = ((color0 >> 5) & 0x3f) + ((color1 >> 5) & 0x3f);
-                            color_scale[2] = 1.0f / 126.0f;
-                            color_int[3]   = ((color0 >> 0) & 0x1f) + ((color1 >> 0) & 0x1f);
-                            color_scale[3] = 1.0f / 62.0f;
-                        }
-                        break;
-                    default:
-                        if (color0 > color1) {
-                            color_int[1]   = 2 * ((color1 >> 11) & 0x1f) + ((color0 >> 11) & 0x1f);
-                            color_scale[1] = 1.0f / 93.0f;
-                            color_int[2]   = 2 * ((color1 >> 5) & 0x3f) + ((color0 >> 5) & 0x3f);
-                            color_scale[2] = 1.0f / 189.0f;
-                            color_int[3]   = 2 * ((color1 >> 0) & 0x1f) + ((color0 >> 0) & 0x1f);
-                            color_scale[3] = 1.0f / 93.0f;
-                        } else {
-                            color_int[0]   = 0;
-                            color_scale[0] = 1.0f;
-                            color_int[1]   = 0;
-                            color_scale[1] = 1.0f;
-                            color_int[2]   = 0;
-                            color_scale[2] = 1.0f;
-                            color_int[3]   = 0;
-                            color_scale[3] = 1.0f;
-                        }
-                        break;
-                }
-            }
-            break;
-        }
-        case 0x04:
-        case 0x83: { /* A4R4G4B4 */
-            uint16_t value = gf_dma_read16(gf, tex->dma_obj, tex_ofs);
-            color_int[0]   = (value >> 12) & 0xf;
-            color_scale[0] = 1.0f / 15.0f;
-            color_int[1]   = (value >> 8) & 0xf;
-            color_scale[1] = 1.0f / 15.0f;
-            color_int[2]   = (value >> 4) & 0xf;
-            color_scale[2] = 1.0f / 15.0f;
-            color_int[3]   = (value >> 0) & 0xf;
-            color_scale[3] = 1.0f / 15.0f;
-            break;
-        }
-        case 0x05:
-        case 0x84: { /* R5G6B5 */
-            uint16_t value = gf_dma_read16(gf, tex->dma_obj, tex_ofs);
-            color_int[0]   = 1;
-            color_scale[0] = 1.0f;
-            color_int[1]   = (value >> 11) & 0x1f;
-            color_scale[1] = 1.0f / 31.0f;
-            color_int[2]   = (value >> 5) & 0x3f;
-            color_scale[2] = 1.0f / 63.0f;
-            color_int[3]   = (value >> 0) & 0x1f;
-            color_scale[3] = 1.0f / 31.0f;
-            break;
-        }
-        case 0x02:
-        case 0x82: { /* A1R5G5B5 */
-            uint16_t value = gf_dma_read16(gf, tex->dma_obj, tex_ofs);
-            if ((tex->control0 & 3) != 0 && value == tex->key_color)
-                color_int[0] = 0;
-            else
-                color_int[0] = (value >> 15) & 1;
-            color_scale[0] = 1.0f;
-            color_int[1]   = (value >> 10) & 0x1f;
-            color_scale[1] = 1.0f / 31.0f;
-            color_int[2]   = (value >> 5) & 0x1f;
-            color_scale[2] = 1.0f / 31.0f;
-            color_int[3]   = (value >> 0) & 0x1f;
-            color_scale[3] = 1.0f / 31.0f;
-            break;
-        }
-        case 0x03: { /* X1R5G5B5 */
-            uint16_t value = gf_dma_read16(gf, tex->dma_obj, tex_ofs);
-            color_int[0]   = 1;
-            color_scale[0] = 1.0f;
-            color_int[1]   = (value >> 10) & 0x1f;
-            color_scale[1] = 1.0f / 31.0f;
-            color_int[2]   = (value >> 5) & 0x1f;
-            color_scale[2] = 1.0f / 31.0f;
-            color_int[3]   = (value >> 0) & 0x1f;
-            color_scale[3] = 1.0f / 31.0f;
-            break;
-        }
-        case 0x27:
-        case 0x8f: { /* R6G5B5 */
-            uint16_t value = gf_dma_read16(gf, tex->dma_obj, tex_ofs);
-            color_int[0]   = 1;
-            color_scale[0] = 1.0f;
-            color_int[1]   = (value >> 10) & 0x3f;
-            color_scale[1] = 1.0f / 63.0f;
-            color_int[2]   = (value >> 5) & 0x1f;
-            color_scale[2] = 1.0f / 31.0f;
-            color_int[3]   = (value >> 0) & 0x1f;
-            color_scale[3] = 1.0f / 31.0f;
-            break;
-        }
-        case 0x28:
-        case 0x8b: { /* G8B8 */
-            uint16_t value = gf_dma_read16(gf, tex->dma_obj, tex_ofs);
-            color_int[0]   = 1;
-            color_scale[0] = 1.0f;
-            color_int[1]   = 1;
-            color_scale[1] = 1.0f;
-            color_int[2]   = (value >> 8) & 0xff;
-            color_scale[2] = 1.0f / 255.0f;
-            color_int[3]   = (value >> 0) & 0xff;
-            color_scale[3] = 1.0f / 255.0f;
-            break;
-        }
-        case 0x06:
-        case 0x12:
-        case 0x85: { /* A8R8G8B8 */
-            uint32_t value = gf_dma_read32(gf, tex->dma_obj, tex_ofs);
-            color_int[0]   = (value >> 24) & 0xff;
-            color_scale[0] = 1.0f / 255.0f;
-            color_int[1]   = (value >> 16) & 0xff;
-            color_scale[1] = 1.0f / 255.0f;
-            color_int[2]   = (value >> 8) & 0xff;
-            color_scale[2] = 1.0f / 255.0f;
-            color_int[3]   = (value >> 0) & 0xff;
-            color_scale[3] = 1.0f / 255.0f;
-            break;
-        }
-        case 0x3a: { /* A8B8G8R8 */
-            uint32_t value = gf_dma_read32(gf, tex->dma_obj, tex_ofs);
-            color_int[0]   = (value >> 24) & 0xff;
-            color_scale[0] = 1.0f / 255.0f;
-            color_int[1]   = (value >> 0) & 0xff;
-            color_scale[1] = 1.0f / 255.0f;
-            color_int[2]   = (value >> 8) & 0xff;
-            color_scale[2] = 1.0f / 255.0f;
-            color_int[3]   = (value >> 16) & 0xff;
-            color_scale[3] = 1.0f / 255.0f;
-            break;
-        }
-        case 0x07:
-        case 0x1e: { /* X8R8G8B8 */
-            uint32_t value = gf_dma_read32(gf, tex->dma_obj, tex_ofs);
-            color_int[0]   = 1;
-            color_scale[0] = 1.0f;
-            color_int[1]   = (value >> 16) & 0xff;
-            color_scale[1] = 1.0f / 255.0f;
-            color_int[2]   = (value >> 8) & 0xff;
-            color_scale[2] = 1.0f / 255.0f;
-            color_int[3]   = (value >> 0) & 0xff;
-            color_scale[3] = 1.0f / 255.0f;
-            break;
-        }
-        case 0x0b: { /* I8_A8R8G8B8 */
-            uint32_t pal_index = gf_dma_read8(gf, tex->dma_obj, tex_ofs);
-            uint32_t value     = gf_dma_read32(gf, tex->pal_dma_obj, tex->pal_ofs + pal_index * 4);
-            color_int[0]       = (value >> 24) & 0xff;
-            color_scale[0]     = 1.0f / 255.0f;
-            color_int[1]       = (value >> 16) & 0xff;
-            color_scale[1]     = 1.0f / 255.0f;
-            color_int[2]       = (value >> 8) & 0xff;
-            color_scale[2]     = 1.0f / 255.0f;
-            color_int[3]       = (value >> 0) & 0xff;
-            color_scale[3]     = 1.0f / 255.0f;
-            break;
-        }
-        case 0x00: /* Y8 */
-        case 0x81: { /* B8 */
-            uint8_t value  = gf_dma_read8(gf, tex->dma_obj, tex_ofs);
-            color_int[0]   = 1;
-            color_scale[0] = 1.0f;
-            color_int[1]   = value;
-            color_scale[1] = 1.0f / 255.0f;
-            color_int[2]   = value;
-            color_scale[2] = 1.0f / 255.0f;
-            color_int[3]   = value;
-            color_scale[3] = 1.0f / 255.0f;
-            break;
-        }
-        case 0x01:
-        case 0x1b: { /* AY8 */
-            uint8_t value  = gf_dma_read8(gf, tex->dma_obj, tex_ofs);
-            color_int[0]   = value;
-            color_scale[0] = 1.0f / 255.0f;
-            color_int[1]   = value;
-            color_scale[1] = 1.0f / 255.0f;
-            color_int[2]   = value;
-            color_scale[2] = 1.0f / 255.0f;
-            color_int[3]   = value;
-            color_scale[3] = 1.0f / 255.0f;
-            break;
-        }
-        default:
-            color_int[0]   = 1;
-            color_scale[0] = 0.8f;
-            color_int[1]   = 1;
-            color_scale[1] = 0.8f + coords[0] * 0.2f;
-            color_int[2]   = 1;
-            color_scale[2] = 0.6f + coords[1] * 0.2f;
-            color_int[3]   = 1;
-            color_scale[3] = 0.6f + coords[2] * 0.2f;
-            break;
+    /* Screen-space footprint (in level 0 texels) from the gradients */
+    if (grad != NULL && !tex->unnormalized) {
+        float tw   = (float) tex->level_w[0];
+        float th   = (float) tex->level_h[0];
+        float dudx = grad[0] * tw;
+        float dvdx = grad[1] * th;
+        float dudy = grad[2] * tw;
+        float dvdy = grad[3] * th;
+        px2 = dudx * dudx + dvdx * dvdx;
+        py2 = dudy * dudy + dvdy * dvdy;
+        if (!(px2 == px2) || !(py2 == py2))
+            px2 = py2 = 0.0f;
     }
-    if (tex->signed_any) {
-        for (uint32_t i = 0; i < 4; i++) {
-            if (tex->signed_comp[i]) {
-                color_int[i]   = (int8_t) color_int[i];
-                color_scale[i] = 1.0f / 128.0f;
-            }
+
+    if (tex->max_aniso > 1 && !tex->cubemap && (px2 > 1.0f || py2 > 1.0f) && px2 > 0.0f && py2 > 0.0f) {
+        /* Anisotropic: walk N probes along the major axis of the footprint and
+           average them, using the LOD of the minor axis (Pmax / N). */
+        float        pmax2 = MAX(px2, py2);
+        float        pmin2 = MIN(px2, py2);
+        const float *axis  = (px2 >= py2) ? &grad[0] : &grad[2];
+        float        ratio2 = pmax2 / pmin2;
+        uint32_t     n;
+        float        acc[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+
+        if (ratio2 >= (float) (tex->max_aniso * tex->max_aniso))
+            n = tex->max_aniso;
+        else
+            n = (uint32_t) ceilf(sqrtf(ratio2));
+        if (n < 1)
+            n = 1;
+        if (n > 8)
+            n = 8;
+        lod = 0.5f * log2f(pmax2 / (float) (n * n));
+        if (lod < 0.0f)
+            lod = 0.0f;
+        for (uint32_t i = 0; i < n; i++) {
+            float k = ((float) i + 0.5f) / (float) n - 0.5f;
+            float c[4];
+            gf_tex_sample_lod(gf, tex, base_ofs, coords[0] + axis[0] * k, coords[1] + axis[1] * k, lod, c);
+            for (int j = 0; j < 4; j++)
+                acc[j] += c[j];
         }
+        for (int j = 0; j < 4; j++)
+            color[j] = acc[j] / (float) n;
+        return;
     }
-    /* A R G B -> color[3] color[0] color[1] color[2] */
-    for (uint32_t i = 0; i < 4; i++) {
-        uint32_t j = (i + 3) & 3;
-        color[j]   = color_int[i] * color_scale[i];
+
+    {
+        float rho2 = MAX(px2, py2);
+        if (rho2 > 1.0f)
+            lod = 0.5f * log2f(rho2);
     }
+    gf_tex_sample_lod(gf, tex, base_ofs, coords[0], coords[1], lod, color);
 }
+
 
 /* -------------------------------------------------------------------------- */
 /*  3D: math helpers                                                          */
@@ -3170,6 +3245,13 @@ gf_d3d_raster_triangle(geforce_t *gf, const gf_rstate_t *rs, const gf_tri_t *tri
     int          zstencil_enable     = rs->depth_test_enable || stencil_test_enable;
     int          rc_enable           = rs->combiner_control_num_stages != 0;
     float        out_color[4];
+    /* texture LOD: analytic derivatives of the perspective-correct interpolation */
+    double       dbdx[3], dbdy[3];
+    float        lod_wx, lod_wy;
+    float        lod_nux[4], lod_nvx[4], lod_nuy[4], lod_nvy[4];
+    int          lod_valid[4];
+    float        tex_grad[4][4];
+    int          tex_grad_ok[4] = { 0, 0, 0, 0 };
 
     memset(ps_in, 0, sizeof(ps_in));
     memset(rc_regs, 0, sizeof(rc_regs));
@@ -3186,6 +3268,25 @@ gf_d3d_raster_triangle(geforce_t *gf, const gf_rstate_t *rs, const gf_tri_t *tri
         if (!tri->interpolate[rs->attrib_out_tex_coord[i]])
             for (int ci = 0; ci < 4; ci++)
                 ps_in[i + 4][ci] = v0[rs->attrib_out_tex_coord[i]][ci];
+    }
+    dbdx[0] = -((double) sp2[1] - sp1[1]) * b012inv;
+    dbdy[0] = ((double) sp2[0] - sp1[0]) * b012inv;
+    dbdx[1] = -((double) sp0[1] - sp2[1]) * b012inv;
+    dbdy[1] = ((double) sp0[0] - sp2[0]) * b012inv;
+    dbdx[2] = -((double) sp1[1] - sp0[1]) * b012inv;
+    dbdy[2] = ((double) sp1[0] - sp0[0]) * b012inv;
+    lod_wx  = (float) (dbdx[0] * sp0[3] + dbdx[1] * sp1[3] + dbdx[2] * sp2[3]);
+    lod_wy  = (float) (dbdy[0] * sp0[3] + dbdy[1] * sp1[3] + dbdy[2] * sp2[3]);
+    for (uint32_t t = 0; t < 4; t++) {
+        uint32_t ai = (t < rs->tex_coord_count) ? rs->attrib_out_tex_coord[t] : 0xf;
+        lod_valid[t] = 0;
+        if (ai < 16 && tri->interpolate[ai] && !rs->texture[t].unnormalized) {
+            lod_valid[t] = 1;
+            lod_nux[t] = (float) (dbdx[0] * sp0[3] * v0[ai][0] + dbdx[1] * sp1[3] * v1[ai][0] + dbdx[2] * sp2[3] * v2[ai][0]);
+            lod_nvx[t] = (float) (dbdx[0] * sp0[3] * v0[ai][1] + dbdx[1] * sp1[3] * v1[ai][1] + dbdx[2] * sp2[3] * v2[ai][1]);
+            lod_nuy[t] = (float) (dbdy[0] * sp0[3] * v0[ai][0] + dbdy[1] * sp1[3] * v1[ai][0] + dbdy[2] * sp2[3] * v2[ai][0]);
+            lod_nvy[t] = (float) (dbdy[0] * sp0[3] * v0[ai][1] + dbdy[1] * sp1[3] * v1[ai][1] + dbdy[2] * sp2[3] * v2[ai][1]);
+        }
     }
 
     for (uint32_t y = 0; y < draw_height; y++) {
@@ -3368,13 +3469,26 @@ gf_d3d_raster_triangle(geforce_t *gf, const gf_rstate_t *rs, const gf_tri_t *tri
                 }
                 rc_regs[0xe][3] = 0.0f;
                 rc_regs[0xf][3] = 0.0f;
+                for (uint32_t t = 0; t < rs->tex_coord_count && t < 4; t++) {
+                    tex_grad_ok[t] = 0;
+                    if (lod_valid[t] && ps_in[0][3] != 0.0f) {
+                        float inv_w = 1.0f / ps_in[0][3];
+                        float u     = ps_in[4 + t][0];
+                        float v     = ps_in[4 + t][1];
+                        tex_grad[t][0] = (lod_nux[t] - u * lod_wx) * inv_w; /* ds/dx */
+                        tex_grad[t][1] = (lod_nvx[t] - v * lod_wx) * inv_w; /* dt/dx */
+                        tex_grad[t][2] = (lod_nuy[t] - u * lod_wy) * inv_w; /* ds/dy */
+                        tex_grad[t][3] = (lod_nvy[t] - v * lod_wy) * inv_w; /* dt/dy */
+                        tex_grad_ok[t] = 1;
+                    }
+                }
                 for (uint32_t t = 0; t < rs->tex_coord_count; t++) {
                     switch (rs->tex_shader_op[t]) {
                         case 0x00: /* NONE */
                             break;
                         case 0x01: /* PROJECT2D */
                         case 0x03: /* CUBEMAP */
-                            gf_d3d_sample_texture(gf, &rs->texture[t], ps_in[4 + t], rc_regs[8 + t]);
+                            gf_d3d_sample_texture(gf, &rs->texture[t], ps_in[4 + t], rc_regs[8 + t], (t < 4 && tex_grad_ok[t]) ? tex_grad[t] : NULL);
                             break;
                         case 0x06: { /* BUMPENVMAP */
                             const float *in_coords  = ps_in[4 + t];
@@ -3385,7 +3499,7 @@ gf_d3d_raster_triangle(geforce_t *gf, const gf_rstate_t *rs, const gf_tri_t *tri
                             coords[0] = in_coords[0] / w + tex->offset_matrix[0] * prev_color[2] + tex->offset_matrix[3] * prev_color[1];
                             coords[1] = in_coords[1] / w + tex->offset_matrix[1] * prev_color[2] + tex->offset_matrix[2] * prev_color[1];
                             coords[2] = 0.0f;
-                            gf_d3d_sample_texture(gf, tex, coords, rc_regs[8 + t]);
+                            gf_d3d_sample_texture(gf, tex, coords, rc_regs[8 + t], (t < 4 && tex_grad_ok[t]) ? tex_grad[t] : NULL);
                             break;
                         }
                         case 0x0c: { /* DOT_RFLCT_SPEC */
@@ -3395,7 +3509,7 @@ gf_d3d_raster_triangle(geforce_t *gf, const gf_rstate_t *rs, const gf_tri_t *tri
                             float        e[3] = { ps_in[4 + 1][3], ps_in[4 + 2][3], ps_in[4 + 3][3] };
                             float        rv[3];
                             gf_reflection(n, e, rv);
-                            gf_d3d_sample_texture(gf, &rs->texture[t], rv, rc_regs[8 + t]);
+                            gf_d3d_sample_texture(gf, &rs->texture[t], rv, rc_regs[8 + t], NULL);
                             break;
                         }
                         case 0x11: { /* DOTPRODUCT */
@@ -4235,6 +4349,8 @@ GF_MH(gf_d3d_mh_flip_read)
 GF_MH(gf_d3d_mh_flip_write)
 {
     (void) ch; (void) cls; (void) method;
+    /* The flip becomes visible to the display side, so all queued 3D work must be done. */
+    gf_render_sync(gf);
     gf->graph_flip_write = param;
 }
 
@@ -4247,6 +4363,7 @@ GF_MH(gf_d3d_mh_flip_modulo)
 GF_MH(gf_d3d_mh_flip_incr)
 {
     (void) ch; (void) cls; (void) method; (void) param;
+    gf_render_sync(gf);
     gf->graph_flip_write++;
     if (gf->graph_flip_modulo)
         gf->graph_flip_write = gf->graph_flip_write % gf->graph_flip_modulo;
@@ -5204,12 +5321,38 @@ GF_MH(gf_d3d_mh_texture)
     } else if ((texture_method == 2 && cls == 0x0096) || (texture_method == 3 && cls != 0x0096)) {
         tex->control0 = param;
         tex->enabled  = (param >> 30) & 1;
+        tex->max_aniso = 1u << ((param >> 4) & 3);
         if (cls == 0x0096)
             ch->rs.tex_shader_op[texture_index & 3] = tex->enabled ? 0x01 : 0x00;
     } else if ((texture_method == 3 && cls == 0x0096) || (texture_method == 4 && cls != 0x0096)) {
         tex->control1 = param;
     } else if ((texture_method == 6 && cls == 0x0096) || (texture_method == 5 && cls != 0x0096)) {
-        /* filtering is not implemented */
+        /* NV_TEXTURE_FILTER: bits 24-27 magnify (1 nearest, 2 linear), bits 16-21
+           minify (1 nearest, 2 linear, 3 nearest_mipmap_nearest, 4 linear_mipmap_nearest,
+           5 nearest_mipmap_linear, 6 linear_mipmap_linear), bits 0-12 LOD bias (S4.8),
+           bits 28-31 signed component selects (Kelvin only). */
+        {
+            uint32_t mag = (param >> 24) & 0xf;
+            uint32_t mn  = (param >> 16) & 0x3f;
+            int32_t  bias = (int32_t) (param & 0x1fff);
+            if (bias & 0x1000)
+                bias -= 0x2000;
+            tex->filter     = param;
+            tex->mag_linear = (mag == 2);
+            tex->min_linear = (mn == 2 || mn == 4 || mn == 6);
+            if (mn >= 5)
+                tex->mip_mode = 2;
+            else if (mn >= 3)
+                tex->mip_mode = 1;
+            else
+                tex->mip_mode = 0;
+            tex->lod_bias = (float) bias / 256.0f;
+            if (mag == 0 && mn == 0) {
+                /* not programmed: default to linear filtering, no mipmaps */
+                tex->mag_linear = 1;
+                tex->min_linear = 1;
+            }
+        }
         if (cls != 0x0096) {
             uint32_t signed_argb = param >> 28;
             tex->signed_any      = signed_argb != 0;
@@ -6404,18 +6547,21 @@ gf_fifo_process_channel(geforce_t *gf, uint32_t chid)
     ch = &gf->chs[chid];
     while (gf->fifo_cache1_dma_get != gf->fifo_cache1_dma_put) {
         uint32_t word = gf_dma_read32(gf, gf->fifo_cache1_dma_instance << 4, gf->fifo_cache1_dma_get);
-        gf->fifo_cache1_dma_get += 4;
         if (ch->dma_state.mcnt) {
+            /* DMA_GET only advances once the method has actually been executed, so
+               a driver polling GET never observes the engine as being ahead of
+               where it really is. */
             int cmd_result = gf_execute_command(gf, chid, ch->dma_state.subc, ch->dma_state.mthd, word);
             if (cmd_result <= 1) {
+                gf->fifo_cache1_dma_get += 4;
                 if (!ch->dma_state.ni)
                     ch->dma_state.mthd = (ch->dma_state.mthd + 1) & 0x7ff;
                 ch->dma_state.mcnt--;
-            } else
-                gf->fifo_cache1_dma_get -= 4;
+            }
             if (cmd_result != 0)
                 break;
         } else {
+            gf->fifo_cache1_dma_get += 4;
             if ((word & 0xe0000003) == 0x20000000) {
                 /* old jump */
                 gf->fifo_cache1_dma_get = word & 0x1fffffff;
